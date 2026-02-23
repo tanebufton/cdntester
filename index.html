@@ -1,0 +1,660 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>CDN Node Lookup</title>
+<meta name="color-scheme" content="dark"/>
+
+<style>
+:root{
+  --bg:#070a12;
+  --panel:rgba(255,255,255,.06);
+  --stroke:rgba(255,255,255,.10);
+  --text:rgba(255,255,255,.92);
+  --muted:rgba(255,255,255,.62);
+  --good:#35e59a;
+  --bad:#ff5d7a;
+  --green:#22c55e;
+  --shadow:0 22px 70px rgba(0,0,0,.60);
+  --radius:18px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --sans: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+}
+
+*{ box-sizing:border-box; }
+
+body{
+  margin:0;
+  font-family:var(--sans);
+  color:var(--text);
+  background:
+    radial-gradient(900px 520px at 10% -10%, rgba(34,197,94,.18), transparent 60%),
+    radial-gradient(900px 520px at 88% -10%, rgba(124,92,255,.16), transparent 60%),
+    linear-gradient(180deg, rgba(255,255,255,.03), transparent 32%),
+    var(--bg);
+}
+
+.wrap{ max-width:1260px; margin:auto; padding:26px 18px 60px; }
+
+header{
+  display:flex; flex-wrap:wrap; gap:14px;
+  align-items:flex-start; justify-content:space-between;
+  margin-bottom:14px;
+}
+
+h1{ margin:0 0 8px; font-size:28px; letter-spacing:.2px; }
+
+.sub{
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.4;
+  max-width:860px;
+}
+
+.pills{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+.pill{
+  font-size:12px; padding:6px 10px; border:1px solid var(--stroke);
+  border-radius:999px; background:rgba(255,255,255,.04);
+  color:var(--muted);
+}
+
+.actions{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:flex-end; }
+
+.btn{
+  appearance:none;
+  border:1px solid var(--stroke);
+  background:rgba(255,255,255,.04);
+  color:var(--text);
+  padding:10px 14px;
+  border-radius:12px;
+  cursor:pointer;
+  font-weight:800;
+  font-size:13px;
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  transition: transform .06s ease, background .16s ease, border-color .16s ease, filter .16s ease;
+  user-select:none;
+}
+.btn:hover{ background:rgba(255,255,255,.06); border-color:rgba(255,255,255,.16); }
+.btn:active{ transform:translateY(1px); }
+.btn:disabled{ opacity:.55; cursor:not-allowed; }
+
+.btnStart{
+  border:none;
+  background:linear-gradient(180deg, rgba(34,197,94,.95), rgba(34,197,94,.78));
+  color:#04120a;
+  box-shadow: 0 10px 30px rgba(34,197,94,.20);
+}
+.btnStart:hover{ filter:brightness(1.02); }
+.btnGhost{ background:rgba(0,0,0,.18); }
+
+.card{
+  background:linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.04));
+  border:1px solid var(--stroke);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+  overflow:hidden;
+  margin-bottom:14px;
+}
+
+.cardHd{
+  padding:14px 16px;
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  border-bottom:1px solid rgba(255,255,255,.07);
+}
+
+.cardHd h2{
+  margin:0;
+  font-size:12px;
+  letter-spacing:.35px;
+  text-transform:uppercase;
+  color:rgba(255,255,255,.78);
+}
+
+.cardBd{ padding:16px; }
+
+.stats{
+  display:grid;
+  grid-template-columns: 1fr;
+  gap:10px;
+}
+@media (min-width: 920px){
+  .stats{ grid-template-columns: 1.2fr 1fr 1fr; }
+}
+
+.stat{
+  padding:12px 12px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,.08);
+  background:rgba(0,0,0,.18);
+  min-height:72px;
+}
+.stat .k{ color:var(--muted); font-size:12px; margin-bottom:6px; display:flex; justify-content:space-between; gap:8px; }
+.stat .v{ font-family:var(--mono); font-size:12.5px; color:rgba(255,255,255,.86); word-break:break-word; white-space:pre-wrap; }
+
+.kbd{
+  font-family:var(--mono);
+  font-size:11.5px;
+  padding:2px 7px;
+  border-radius:8px;
+  border:1px solid rgba(255,255,255,.12);
+  background:rgba(255,255,255,.04);
+  color:rgba(255,255,255,.75);
+}
+
+.progressWrap{
+  margin-top:12px;
+  height:8px;
+  background:rgba(255,255,255,.10);
+  border-radius:999px;
+  overflow:hidden;
+}
+.progressBar{
+  height:100%;
+  width:0%;
+  background:linear-gradient(90deg, rgba(34,197,94,.90), rgba(124,92,255,.55));
+  transition: width .18s ease;
+}
+
+.tableWrap{
+  overflow:auto;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,.08);
+  background:rgba(0,0,0,.18);
+}
+
+table{
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0;
+  min-width:980px;
+  table-layout:fixed;
+}
+
+thead th{
+  text-align:left;
+  font-size:12px;
+  color:rgba(255,255,255,.72);
+  padding:12px 12px;
+  border-bottom:1px solid rgba(255,255,255,.08);
+  position:sticky; top:0;
+  background:rgba(12,14,22,.92);
+  backdrop-filter: blur(10px);
+  z-index:1;
+  white-space:nowrap;
+  user-select:none;
+}
+
+tbody td{
+  padding:12px 12px;
+  border-bottom:1px solid rgba(255,255,255,.06);
+  vertical-align:middle;
+  font-size:13px;
+}
+
+tbody tr:hover td{ background:rgba(255,255,255,.02); }
+
+.colCdn{ width:260px; }
+.colNode{ width:360px; }
+.colDetails{ width:260px; }
+.colHeaders{ width:140px; }
+.colStatus{ width:140px; text-align:right; }
+
+.nodeText{
+  white-space:normal;
+  word-break:break-word;
+  line-height:1.25;
+}
+.mono{ font-family:var(--mono); font-size:12.5px; }
+
+.badge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:6px 10px;
+  border-radius:999px;
+  font-size:12px;
+  font-weight:900;
+  border:1px solid rgba(255,255,255,.10);
+}
+.badgeOk{ background:rgba(53,229,154,.16); color:var(--good); }
+.badgeBad{ background:rgba(255,93,122,.16); color:var(--bad); }
+
+.smallBtn{
+  appearance:none;
+  border:1px solid rgba(255,255,255,.12);
+  background:rgba(255,255,255,.06);
+  color:rgba(255,255,255,.88);
+  padding:7px 10px;
+  border-radius:10px;
+  cursor:pointer;
+  font-size:12px;
+  font-weight:800;
+}
+.smallBtn:hover{ background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.18); }
+
+.modal{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.72);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  padding:20px;
+}
+.modalBox{
+  background:rgba(13,15,24,.96);
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:16px;
+  width:min(980px, 96vw);
+  max-height:82vh;
+  overflow:auto;
+  box-shadow: 0 22px 70px rgba(0,0,0,.65);
+}
+.modalHd{
+  display:flex; align-items:flex-start; justify-content:space-between; gap:10px;
+  padding:14px 16px;
+  border-bottom:1px solid rgba(255,255,255,.08);
+}
+.modalHd h3{ margin:0; font-size:14px; }
+.modalSub{ color:var(--muted); font-size:12.5px; margin-top:4px; }
+.modalBd{ padding:14px 16px; }
+pre{
+  margin:0;
+  white-space:pre-wrap;
+  font-size:12px;
+  font-family:var(--mono);
+  color:rgba(255,255,255,.85);
+}
+</style>
+</head>
+
+<body>
+<div class="wrap">
+
+<header>
+  <div>
+    <h1>CDN Node Lookup</h1>
+    <div class="sub">Browser-only CDN POP checker. Runs parallel probes, extracts node/POP identifiers from headers/trace, and provides a header inspector + TXT export.</div>
+    <div class="pills">
+      <span class="pill">Beta</span>
+      <span class="pill">~24 tests</span>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn btnGhost" id="btnCopy" disabled>📋 Copy</button>
+    <button class="btn btnGhost" id="btnExport" disabled>⬇️ Export TXT</button>
+    <button class="btn btnStart" id="btnRun">▶ Start</button>
+  </div>
+</header>
+
+<section class="card">
+  <div class="cardHd">
+    <h2>Client info</h2>
+    <div class="pill" id="runState">Idle</div>
+  </div>
+  <div class="cardBd">
+    <div class="stats">
+      <div class="stat">
+        <div class="k">User Agent <span class="kbd">auto</span></div>
+        <div class="v" id="ua"></div>
+      </div>
+      <div class="stat">
+        <div class="k">Public IP</div>
+        <div class="v" id="ip">Detecting…</div>
+      </div>
+      <div class="stat">
+        <div class="k">ASN / ISP</div>
+        <div class="v" id="asn">Detecting…</div>
+      </div>
+    </div>
+    <div class="progressWrap" aria-label="progress">
+      <div class="progressBar" id="bar"></div>
+    </div>
+  </div>
+</section>
+
+<section class="card">
+  <div class="cardHd">
+    <h2>Results</h2>
+    <div class="pill"><span id="countOk">0</span>/<span id="countTotal">0</span> OK</div>
+  </div>
+  <div class="cardBd">
+    <div class="tableWrap">
+      <table id="table">
+        <thead>
+          <tr>
+            <th class="colCdn">CDN</th>
+            <th class="colNode">Node / POP</th>
+            <th class="colDetails">Details</th>
+            <th class="colHeaders">Headers</th>
+            <th class="colStatus" style="text-align:right;">Status</th>
+          </tr>
+        </thead>
+        <tbody id="results"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+</div>
+
+<!-- Header inspector modal -->
+<div class="modal" id="modal">
+  <div class="modalBox" role="dialog" aria-modal="true">
+    <div class="modalHd">
+      <div>
+        <h3 id="modalTitle">Header Inspector</h3>
+        <div class="modalSub" id="modalSub">—</div>
+      </div>
+      <button class="btn btnGhost" id="btnClose">✕ Close</button>
+    </div>
+    <div class="modalBd">
+      <pre id="modalText"></pre>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------- client info ----------
+document.getElementById("ua").textContent = navigator.userAgent;
+
+fetch("https://ipinfo.io/json", {cache:"no-store"})
+  .then(r => r.json())
+  .then(j => {
+    document.getElementById("ip").textContent = j.ip || "Unknown";
+    document.getElementById("asn").textContent = j.org || "Unknown";
+  })
+  .catch(() => {
+    document.getElementById("ip").textContent = "Unavailable";
+    document.getElementById("asn").textContent = "Unavailable";
+  });
+
+// ---------- full test list (v10-style, +Apple, -G-Core) ----------
+const cdnsRaw = [
+  {name:"Apple Edge", url:"http://test.edge.apple/who", type:"text"},
+  {name:"Cloudflare", url:"https://tane.nz/cdn-cgi/trace", type:"trace"},
+  {name:"Cloudflare CN", url:"https://perfops.cloudflareperf.com/cdn-cgi/trace", type:"trace"},
+  {name:"Fastly", url:"https://any.pops.fastly-analytics.com", header:"x-served-by", parse: (h)=>parseFastly(h.get("x-served-by"))},
+  {name:"jsDelivr", url:"https://cdn.jsdelivr.net/npm/latency-test@1.0.0/generate_200", parse: (h)=>parseJsDelivr(h)},
+  {name:"AWS CloudFront", url:"https://djlzvy5xcvhxt.cloudfront.net/500b-bench.jpg", parse:(h)=>pick(h.get("x-amz-cf-pop"), v=>v.split(";")[0])},
+  {name:"GCP Anycast LB", url:"https://global.gcping.com/api/ping", type:"text"},
+  {name:"Akamai", url:"https://akamai-cdn.perfops.io/500b-bench.jpg", parse:(h)=>pick(h.get("x-cache2"), v=>v.split("|")[2] || null)},
+  {name:"Akamai Video", url:"https://perfopsrum.akamaized.net/500b-bench.jpg", parse:(h)=>pick(h.get("x-cache2"), v=>v.split("|")[2] || null)},
+  {name:"Akamai Edge IP Binding", url:"https://perfopsrum-eip.akamaized.net/500b-bench.jpg", parse:(h)=>pick(h.get("x-cache2"), v=>v.split("|")[2] || null)},
+  {name:"Bunny Standard", url:"https://test.b-cdn.net", parse:(h)=>parseBunny(h.get("server")||h.get("Server"))},
+  {name:"Bunny Volume", url:"https://testvideo.b-cdn.net", parse:(h)=>parseBunny(h.get("server")||h.get("Server"))},
+  {name:"CDN77", url:"https://1596384882.rsc.cdn77.org/500b-bench.jpg", parse:(h)=>h.get("x-77-pop")},
+  {name:"Tencent EdgeOne Static", url:"https://eo-static-perfops2.qcloudcdn.com/500b-bench.jpg", parse:(h)=>parseXcc(h.get("xcc"))},
+  {name:"Virtuozzo (CDN.net)", url:"https://perfops.r.worldssl.net/500b-bench.jpg", parse:(h)=>h.get("x-edge-location")},
+  {name:"OVH CDN", url:"https://ovh-cdn.perfops.io/500b-bench.jpg", parse:(h)=>h.get("x-cdn-pop")},
+  {name:"CacheFly", url:"https://cdnperf.cachefly.net/500b-bench.jpg", parse:(h)=>parseCacheFly(h.get("x-cf1"))},
+  {name:"Medianova", url:"https://medianova-cdnvperf.mncdn.com/500b-bench.jpg", parse:(h)=>h.get("X-Edge-Location")||h.get("x-edge-location")},
+  {name:"Zenlayer", url:"https://test-perfops.ecn.zenlayer.net/500b-bench.jpg", parse:(h)=>parseZenlayerVia(h.get("via"))},
+  {name:"Melbicom (SwiftyCDN)", url:"https://perfops.swiftycdn.net/500b-sw-bench.jpg", parse:(h)=>h.get("x-swifty-node")},
+  {name:"ByteDance", url:"https://perfops.byte-test.com/500b-bench.jpg", parse:(h)=>parseViaDomain(h.get("via"))},
+  {name:"ByteDance Overseas", url:"https://perfops2.byte-test.com/500b-bench.jpg", parse:(h)=>parseViaDomain(h.get("via"))},
+  {name:"NetEase", url:"https://necaptcha.nosdn.127.net/ab7f4275c1744aa28e0a8f3a1c58c532.png", parse:(h)=>[h.get("cdn-source"), h.get("cdn-ip")].filter(Boolean).join(", ")||null},
+  {name:"QUANTIL", url:"https://cdnperf-rum.quantil.com/500b-bench.jpg", parse:(h)=>parseViaPops(h.get("via")||h.get("x-via"))},
+  {name:"CDNetworks", url:"https://cdnperf-rum.cdnetworks.net/500b-bench.jpg", parse:(h)=>parseViaPops(h.get("via")||h.get("x-via"))},
+];
+
+const cdns = cdnsRaw.sort((a,b)=>a.name.localeCompare(b.name));
+
+// ---------- helpers ----------
+function pick(val, fn){ if(!val) return null; try{ return fn(val);}catch{return null;} }
+function parseFastly(servedBy){
+  if(!servedBy) return null;
+  const parts = servedBy.split("-");
+  return parts.length ? parts[parts.length-1] : servedBy;
+}
+function parseBunny(server){
+  if(!server) return null;
+  const parts = server.split("-");
+  if(parts.length >= 3) return `${parts[1]}-${parts[2]}`;
+  return server;
+}
+function parseJsDelivr(h){
+  const server = (h.get("Server")||h.get("server")||"").toLowerCase();
+  if(server.includes("cloudflare")){
+    const ray = h.get("cf-ray");
+    return "Cloudflare" + (ray ? ", " + ray.split("-")[1] : "");
+  }
+  if(h.get("x-id") && h.get("x-cached-since")) return "G-Core Lab"; // informational only
+  const servedBy = h.get("x-served-by");
+  const parts = servedBy ? servedBy.split("-") : null;
+  return "Fastly" + (parts ? ", " + parts[parts.length-1] : "");
+}
+function parseXcc(xcc){
+  if(!xcc) return null;
+  try{
+    const decoded = atob(xcc);
+    if(/^[\x09\x0A\x0D\x20-\x7E]+$/.test(decoded)) return decoded;
+    return null;
+  }catch{return null;}
+}
+function parseCacheFly(xcf1){
+  if(!xcf1) return null;
+  const seg = xcf1.split(":")[4];
+  return seg ? (seg.split(".")[1] || null) : null;
+}
+function parseZenlayerVia(via){
+  if(!via) return null;
+  const matches = via.match(/\s[A-Z]+\.\w+/g);
+  return matches ? matches.map(s=>s.trim()).join(", ") : null;
+}
+function parseViaDomain(via){
+  if(!via) return null;
+  const idx = via.indexOf(".");
+  return idx >= 0 ? via.slice(idx+1).trim() : via.trim();
+}
+function parseViaPops(v){
+  if(!v) return null;
+  const matches = Array.from(v.matchAll(/-(\w+)-/g));
+  return matches.length ? matches.map(m=>m[1]).join(", ") : null;
+}
+function escapeHtml(s){
+  return String(s ?? "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+function headersToObject(headers){
+  const obj = {};
+  try{ headers.forEach((v,k)=>{ obj[k]=v; }); }catch{}
+  return obj;
+}
+
+// ---------- state ----------
+let running = false;
+let rowsState = []; // indexed by cdns order
+let okCount = 0;
+
+const elResults = document.getElementById("results");
+const elBar = document.getElementById("bar");
+const elRunState = document.getElementById("runState");
+const elBtnRun = document.getElementById("btnRun");
+const elBtnExport = document.getElementById("btnExport");
+const elBtnCopy = document.getElementById("btnCopy");
+const elOk = document.getElementById("countOk");
+const elTotal = document.getElementById("countTotal");
+
+function setRunning(on){
+  running = on;
+  elRunState.textContent = on ? "Running…" : "Idle";
+  elBtnRun.disabled = on;
+  elBtnExport.disabled = on || rowsState.length === 0;
+  elBtnCopy.disabled = on || rowsState.length === 0;
+}
+
+function updateCounts(){
+  elOk.textContent = String(okCount);
+  elTotal.textContent = String(cdns.length);
+  elBtnExport.disabled = running || rowsState.length === 0;
+  elBtnCopy.disabled = running || rowsState.length === 0;
+}
+
+function render(){
+  elResults.innerHTML = "";
+  for(const r of rowsState){
+    const badge = r.status === "OK"
+      ? `<span class="badge badgeOk">OK</span>`
+      : `<span class="badge badgeBad">Error</span>`;
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="colCdn"><div style="font-weight:900">${escapeHtml(r.cdn)}</div></td>
+      <td class="colNode"><div class="nodeText mono">${escapeHtml(r.node || "—")}</div></td>
+      <td class="colDetails"><div class="mono" style="color:rgba(255,255,255,.75)">${escapeHtml(r.details || "—")}</div></td>
+      <td class="colHeaders"><button class="smallBtn">View</button></td>
+      <td class="colStatus" style="text-align:right">${badge}</td>
+    `;
+    tr.querySelector("button").addEventListener("click", ()=>showHeaders(r));
+    elResults.appendChild(tr);
+  }
+  updateCounts();
+}
+
+// ---------- modal ----------
+const modal = document.getElementById("modal");
+const modalTitle = document.getElementById("modalTitle");
+const modalSub = document.getElementById("modalSub");
+const modalText = document.getElementById("modalText");
+document.getElementById("btnClose").addEventListener("click", ()=>{ modal.style.display="none"; });
+modal.addEventListener("click", (e)=>{ if(e.target === modal) modal.style.display="none"; });
+
+function showHeaders(row){
+  modalTitle.textContent = `Header Inspector — ${row.cdn}`;
+  modalSub.textContent = row.url;
+  const payload = {
+    cdn: row.cdn,
+    node: row.node,
+    details: row.details,
+    status: row.status,
+    url: row.url,
+    headers: row.headers,
+  };
+  modalText.textContent = JSON.stringify(payload, null, 2);
+  modal.style.display = "flex";
+}
+
+// ---------- report / export / copy ----------
+function generateReport(){
+  const lines = [];
+  lines.push("CDN NODE LOOKUP REPORT");
+  lines.push("======================");
+  lines.push("");
+  lines.push("User Agent: " + navigator.userAgent);
+  lines.push("IP: " + document.getElementById("ip").textContent);
+  lines.push("ASN: " + document.getElementById("asn").textContent);
+  lines.push("");
+  lines.push("Results");
+  lines.push("----------------------");
+  for(const r of rowsState){
+    lines.push(`${r.cdn} — ${r.node || "—"} — ${r.details || "—"} — ${r.status}`);
+  }
+  return lines.join("\n");
+}
+
+elBtnExport.addEventListener("click", ()=>{
+  const blob = new Blob([generateReport()], {type:"text/plain;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "cdn-report.txt";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+elBtnCopy.addEventListener("click", async ()=>{
+  await navigator.clipboard.writeText(generateReport());
+  const old = elBtnCopy.textContent;
+  elBtnCopy.textContent = "✅ Copied";
+  setTimeout(()=> elBtnCopy.textContent = old, 1400);
+});
+
+// ---------- runner ----------
+async function run(){
+  if(running) return;
+  setRunning(true);
+  elBar.style.width = "0%";
+  okCount = 0;
+
+  rowsState = cdns.map(c => ({cdn:c.name, node:"Checking…", details:"—", status:"…", headers:{}, url:c.url}));
+  render();
+
+  const total = cdns.length;
+  let done = 0;
+
+  const tasks = cdns.map(async (c, idx) => {
+    try{
+      const res = await fetch(c.url, {cache:"no-store"});
+      const headersObj = headersToObject(res.headers);
+
+      let node = null;
+      let details = "";
+
+      if(c.type === "trace"){
+        const text = await res.text();
+        const m = text.match(/colo=(.*)/);
+        node = m ? m[1] : null;
+        details = "cloudflare trace";
+      } else if(c.type === "text"){
+        node = (await res.text()).trim();
+        details = "text endpoint";
+      } else {
+        node = c.parse ? c.parse(res.headers) : null;
+        if(!node){
+          // fallback: try common headers
+          node = res.headers.get("x-served-by")
+            || res.headers.get("x-amz-cf-pop")
+            || res.headers.get("x-77-pop")
+            || res.headers.get("x-cdn-pop")
+            || res.headers.get("x-edge-location")
+            || res.headers.get("via")
+            || "Hidden / N/A";
+        }
+        details = (res.headers.get("server") || res.headers.get("Server") || "").slice(0, 60) || "—";
+      }
+
+      if(res.ok) okCount++;
+
+      rowsState[idx] = {
+        cdn: c.name,
+        node: node || "Hidden / N/A",
+        details: details || "—",
+        status: res.ok ? "OK" : ("HTTP " + res.status),
+        headers: headersObj,
+        url: c.url,
+      };
+    } catch (e){
+      rowsState[idx] = {
+        cdn: c.name,
+        node: "Failed",
+        details: "—",
+        status: "Error",
+        headers: {},
+        url: c.url,
+      };
+    } finally {
+      done++;
+      elBar.style.width = Math.round((done/total)*100) + "%";
+      if(done === total || done % 3 === 0) render();
+    }
+  });
+
+  await Promise.all(tasks);
+  setRunning(false);
+  render();
+}
+
+elBtnRun.addEventListener("click", run);
+
+// Auto-run
+window.addEventListener("load", ()=> setTimeout(run, 450));
+</script>
+</body>
+</html>
