@@ -374,7 +374,7 @@ fetch("https://ipinfo.io/json", {cache:"no-store"})
 
 // ---------- full test list (v10-style, +Apple, -G-Core) ----------
 const cdnsRaw = [
-  {name:"Apple Edge", url:"http://test.edge.apple/who", type:"text"},
+  {name:"Apple Edge", url:"https://test.edge.apple/who", type:"text"},
   {name:"Cloudflare", url:"https://tane.nz/cdn-cgi/trace", type:"trace"},
   {name:"Cloudflare CN", url:"https://perfops.cloudflareperf.com/cdn-cgi/trace", type:"trace"},
   {name:"Fastly", url:"https://any.pops.fastly-analytics.com", header:"x-served-by", parse: (h)=>parseFastly(h.get("x-served-by"))},
