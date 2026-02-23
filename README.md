@@ -116,14 +116,3 @@ No backend required.
 - Public IP lookup uses `https://ipinfo.io`  
 
 ---
-
-## Roadmap / Ideas
-
-- Retry + timeout per CDN  
-- POP → City mapping  
-- Latency measurement  
-- JSON / CSV export  
-- Compare runs  
-- IPv4 vs IPv6 detection panel  
-- Cache HIT / MISS detection  
-- Anycast vs Unicast hints  
