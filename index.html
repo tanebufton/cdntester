@@ -124,6 +124,45 @@ h1{ margin:0 0 8px; font-size:28px; letter-spacing:.2px; }
   .stats{ grid-template-columns: 1.2fr 1fr 1fr; }
 }
 
+/* ---- Mobile ---- */
+@media (max-width: 768px) {
+  h1{ font-size:24px; }
+  .actions .btn{ font-size:12px; padding:9px 11px; }
+}
+
+@media (max-width: 600px) {
+  h1{ font-size:20px; }
+  .wrap{ padding:16px 12px 36px; }
+  header{ flex-direction:column; gap:10px; }
+  .actions{
+    width:100%;
+    flex-wrap:wrap;
+  }
+  .actions .btn{
+    flex:1 1 calc(33% - 8px);
+    min-width:0;
+    justify-content:center;
+    font-size:12px;
+    padding:9px 10px;
+  }
+  .actions .btnStart{
+    flex:1 1 100%;
+    justify-content:center;
+  }
+  .colDetails{ display:none; }
+  .colCdn{ width:170px; }
+  .colNode{ width:200px; }
+  .colLatency{ width:75px; }
+  .colHeaders{ width:90px; }
+  .colStatus{ width:100px; }
+  table{ min-width:635px; }
+}
+
+@media (max-width: 400px) {
+  .colLatency{ display:none; }
+  table{ min-width:560px; }
+}
+
 .stat{
   padding:12px 12px;
   border-radius:14px;
@@ -197,11 +236,12 @@ tbody td{
 
 tbody tr:hover td{ background:rgba(255,255,255,.02); }
 
-.colCdn{ width:260px; }
-.colNode{ width:360px; }
-.colDetails{ width:260px; }
-.colHeaders{ width:140px; }
-.colStatus{ width:140px; text-align:right; }
+.colCdn{ width:240px; }
+.colNode{ width:320px; }
+.colDetails{ width:240px; }
+.colHeaders{ width:110px; }
+.colLatency{ width:90px; text-align:right; }
+.colStatus{ width:120px; text-align:right; }
 
 .nodeText{
   white-space:normal;
@@ -222,6 +262,7 @@ tbody tr:hover td{ background:rgba(255,255,255,.02); }
 }
 .badgeOk{ background:rgba(53,229,154,.16); color:var(--good); }
 .badgeBad{ background:rgba(255,93,122,.16); color:var(--bad); }
+.badgeWarn{ background:rgba(251,191,36,.14); color:#fbbf24; }
 
 .smallBtn{
   appearance:none;
@@ -284,12 +325,13 @@ pre{
     <div class="sub">Browser-only CDN POP checker. Runs parallel probes, extracts node/POP identifiers from headers/trace, and provides a header inspector + TXT export.</div>
     <div class="pills">
       <span class="pill">Beta</span>
-      <span class="pill">~24 tests</span>
+      <span class="pill" id="pillTestCount">— tests</span>
     </div>
   </div>
   <div class="actions">
     <button class="btn btnGhost" id="btnCopy" disabled>📋 Copy</button>
     <button class="btn btnGhost" id="btnExport" disabled>⬇️ Export TXT</button>
+    <button class="btn btnGhost" id="btnJsonExport" disabled>⬇️ Export JSON</button>
     <button class="btn btnStart" id="btnRun">▶ Start</button>
   </div>
 </header>
@@ -334,6 +376,7 @@ pre{
             <th class="colNode">Node / POP</th>
             <th class="colDetails">Details</th>
             <th class="colHeaders">Headers</th>
+            <th class="colLatency" style="text-align:right;">Latency</th>
             <th class="colStatus" style="text-align:right;">Status</th>
           </tr>
         </thead>
@@ -403,6 +446,7 @@ const cdnsRaw = [
   {name:"NetEase", url:"https://necaptcha.nosdn.127.net/ab7f4275c1744aa28e0a8f3a1c58c532.png", parse:(h)=>[h.get("cdn-source"), h.get("cdn-ip")].filter(Boolean).join(", ")||null},
   {name:"QUANTIL", url:"https://cdnperf-rum.quantil.com/500b-bench.jpg", parse:(h)=>parseViaPops(h.get("via")||h.get("x-via"))},
   {name:"CDNetworks", url:"https://cdnperf-rum.cdnetworks.net/500b-bench.jpg", parse:(h)=>parseViaPops(h.get("via")||h.get("x-via"))},
+  {name:"Gcore", url:"https://testsupport.gcdn.co/files/test.jpg", parse:(h)=>h.get("x-id")},
 ];
 
 const cdns = cdnsRaw.sort((a,b)=>a.name.localeCompare(b.name));
@@ -483,6 +527,7 @@ const elBar = document.getElementById("bar");
 const elRunState = document.getElementById("runState");
 const elBtnRun = document.getElementById("btnRun");
 const elBtnExport = document.getElementById("btnExport");
+const elBtnJsonExport = document.getElementById("btnJsonExport");
 const elBtnCopy = document.getElementById("btnCopy");
 const elOk = document.getElementById("countOk");
 const elTotal = document.getElementById("countTotal");
@@ -492,6 +537,7 @@ function setRunning(on){
   elRunState.textContent = on ? "Running…" : "Idle";
   elBtnRun.disabled = on;
   elBtnExport.disabled = on || rowsState.length === 0;
+  elBtnJsonExport.disabled = on || rowsState.length === 0;
   elBtnCopy.disabled = on || rowsState.length === 0;
 }
 
@@ -499,15 +545,26 @@ function updateCounts(){
   elOk.textContent = String(okCount);
   elTotal.textContent = String(cdns.length);
   elBtnExport.disabled = running || rowsState.length === 0;
+  elBtnJsonExport.disabled = running || rowsState.length === 0;
   elBtnCopy.disabled = running || rowsState.length === 0;
 }
 
 function render(){
   elResults.innerHTML = "";
   for(const r of rowsState){
-    const badge = r.status === "OK"
-      ? `<span class="badge badgeOk">OK</span>`
-      : `<span class="badge badgeBad">Error</span>`;
+    let badge;
+    if(r.status === "OK"){
+      badge = `<span class="badge badgeOk">OK</span>`;
+    } else if(r.status === "Timeout"){
+      badge = `<span class="badge badgeWarn">Timeout</span>`;
+    } else if(r.status.startsWith("HTTP ")){
+      badge = `<span class="badge badgeWarn">${escapeHtml(r.status)}</span>`;
+    } else if(r.status === "…"){
+      badge = `<span class="badge" style="color:var(--muted)">—</span>`;
+    } else {
+      badge = `<span class="badge badgeBad">Error</span>`;
+    }
+    const latencyStr = r.latency != null ? r.latency + " ms" : "—";
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
@@ -515,6 +572,7 @@ function render(){
       <td class="colNode"><div class="nodeText mono">${escapeHtml(r.node || "—")}</div></td>
       <td class="colDetails"><div class="mono" style="color:rgba(255,255,255,.75)">${escapeHtml(r.details || "—")}</div></td>
       <td class="colHeaders"><button class="smallBtn">View</button></td>
+      <td class="colLatency" style="text-align:right"><span class="mono" style="color:var(--muted)">${escapeHtml(latencyStr)}</span></td>
       <td class="colStatus" style="text-align:right">${badge}</td>
     `;
     tr.querySelector("button").addEventListener("click", ()=>showHeaders(r));
@@ -551,6 +609,7 @@ function generateReport(){
   const lines = [];
   lines.push("CDN NODE LOOKUP REPORT");
   lines.push("======================");
+  lines.push("Generated: " + new Date().toISOString());
   lines.push("");
   lines.push("User Agent: " + navigator.userAgent);
   lines.push("IP: " + document.getElementById("ip").textContent);
@@ -559,7 +618,8 @@ function generateReport(){
   lines.push("Results");
   lines.push("----------------------");
   for(const r of rowsState){
-    lines.push(`${r.cdn} — ${r.node || "—"} — ${r.details || "—"} — ${r.status}`);
+    const lat = r.latency != null ? ` — ${r.latency}ms` : "";
+    lines.push(`${r.cdn} — ${r.node || "—"} — ${r.details || "—"} — ${r.status}${lat}`);
   }
   return lines.join("\n");
 }
@@ -587,15 +647,20 @@ async function run(){
   elBar.style.width = "0%";
   okCount = 0;
 
-  rowsState = cdns.map(c => ({cdn:c.name, node:"Checking…", details:"—", status:"…", headers:{}, url:c.url}));
+  rowsState = cdns.map(c => ({cdn:c.name, node:"Checking…", details:"—", status:"…", headers:{}, url:c.url, latency:null}));
   render();
 
   const total = cdns.length;
   let done = 0;
 
   const tasks = cdns.map(async (c, idx) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const t0 = performance.now();
     try{
-      const res = await fetch(c.url, {cache:"no-store"});
+      const res = await fetch(c.url, {cache:"no-store", signal: controller.signal});
+      clearTimeout(timeoutId);
+      const latency = Math.round(performance.now() - t0);
       const headersObj = headersToObject(res.headers);
 
       let node = null;
@@ -633,15 +698,18 @@ async function run(){
         status: res.ok ? "OK" : ("HTTP " + res.status),
         headers: headersObj,
         url: c.url,
+        latency,
       };
     } catch (e){
+      clearTimeout(timeoutId);
       rowsState[idx] = {
         cdn: c.name,
         node: "Failed",
-        details: "—",
-        status: "Error",
+        details: e.name === "AbortError" ? "Timeout (10s)" : (e.message || "Network error"),
+        status: e.name === "AbortError" ? "Timeout" : "Error",
         headers: {},
         url: c.url,
+        latency: null,
       };
     } finally {
       done++;
@@ -655,7 +723,26 @@ async function run(){
   render();
 }
 
+elBtnJsonExport.addEventListener("click", ()=>{
+  const data = {
+    generated: new Date().toISOString(),
+    userAgent: navigator.userAgent,
+    ip: document.getElementById("ip").textContent,
+    asn: document.getElementById("asn").textContent,
+    results: rowsState,
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:"application/json;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "cdn-report.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
 elBtnRun.addEventListener("click", run);
+
+// Init
+document.getElementById("pillTestCount").textContent = cdns.length + " tests";
 
 // Auto-run
 window.addEventListener("load", ()=> setTimeout(run, 450));
