@@ -422,7 +422,7 @@ fetch("https://ipinfo.io/json", {cache:"no-store"})
 // ---------- full test list (v10-style, +Apple, -G-Core) ----------
 const cdnsRaw = [
   {name:"Apple Edge", url:"https://test.edge.apple/who", type:"text"},
-  {name:"Cloudflare", url:"https://tane.nz/cdn-cgi/trace", type:"trace"},
+  {name:"Cloudflare", url:"https://cloudflare.com/cdn-cgi/trace", type:"trace"},
   {name:"Cloudflare CN", url:"https://perfops.cloudflareperf.com/cdn-cgi/trace", type:"trace"},
   {name:"Fastly", url:"https://any.pops.fastly-analytics.com", header:"x-served-by", parse: (h)=>parseFastly(h.get("x-served-by"))},
   {name:"jsDelivr", url:"https://cdn.jsdelivr.net/npm/latency-test@1.0.0/generate_200", parse: (h)=>parseJsDelivr(h)},
@@ -446,7 +446,6 @@ const cdnsRaw = [
   {name:"NetEase", url:"https://necaptcha.nosdn.127.net/ab7f4275c1744aa28e0a8f3a1c58c532.png", parse:(h)=>[h.get("cdn-source"), h.get("cdn-ip")].filter(Boolean).join(", ")||null},
   {name:"QUANTIL", url:"https://cdnperf-rum.quantil.com/500b-bench.jpg", parse:(h)=>parseViaPops(h.get("via")||h.get("x-via"))},
   {name:"CDNetworks", url:"https://cdnperf-rum.cdnetworks.net/500b-bench.jpg", parse:(h)=>parseViaPops(h.get("via")||h.get("x-via"))},
-  {name:"Gcore", url:"https://testsupport.gcdn.co/files/test.jpg", parse:(h)=>h.get("x-id")},
 ];
 
 const cdns = cdnsRaw.sort((a,b)=>a.name.localeCompare(b.name));
