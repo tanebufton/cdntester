@@ -11,44 +11,41 @@ Inspired by https://ip.skk.moe/cdn-node-lookup
 
 ## Features
 
-- Browser-only (pure HTML + Vanilla JS), no build step
-- Probes ~28 CDN endpoints with a configurable parallelism limit (4 / 6 / 12 / all)
-- Detects CDN POP / node from headers or trace endpoints, and maps airport-style POP codes (e.g. `IAD`, `AKL`) to a city
-- **Cold vs warm latency**: the first request includes DNS/TLS setup; follow-up samples (1 / 3 / 5, configurable) reuse the connection. The table shows the warm median, with cold and best underneath
-- Cache status column (HIT / MISS / age) when the CDN exposes it to browsers
-- Clear status badges: `OK`, `OK · no POP` (reachable but POP header hidden), `Blocked` (host answered but CORS stops reading it), `Unreachable` (DNS/TLS/network), `Timeout`, `HTTP nnn`
-- Sortable columns, summary strip (fastest / slowest / median / failures) and **Retry failed**
-- Run history saved in `localStorage` (last 10 runs) with per-CDN and average deltas against the previous run; **Clear history** wipes it
-- Header Inspector popup (raw headers, samples and Resource Timing per CDN)
-- TXT export, JSON export, copy-to-clipboard report
-- Client info: public IP, separate IPv4 / IPv6 reachability, ASN and location
-- Auto-run on load, progress bar, mobile layout
+### Overview (the main test)
+- ~28 built-in CDN endpoints plus **your own custom targets** (any HTTPS URL, with a POP header, Cloudflare-style trace, or body text), run with a configurable parallelism limit
+- POP / node detection from headers or trace endpoints, mapped to a **city** (200+ airport codes plus vendor formats for Apple, CacheFly, CDN77, OVH, GCP). When a node doesn't reveal a location, the node IP or resolved endpoint is geolocated and marked `~` (approximate); anycast IPs are labelled `Anycast`
+- **Cold vs warm latency** (1 / 3 / 5 samples): the table shows the warm median with cold and best below it, plus an inline bar
+- **Routing efficiency**: great-circle distance from you to the POP, the physical minimum RTT over fibre, and measured ÷ ideal (`×`)
+- **Route-change detection**: warns when a CDN's POP differs from your last saved run
+- **IPv4 / IPv6** per endpoint (A / AAAA records via DNS-over-HTTPS, with the family your browser probably used highlighted) and your own v4 / v6 reachability
+- Cache status (HIT / MISS / age) when exposed, protocol (h1 / h2 / h3), Resource Timing in the header inspector
+- Clear status badges: `OK`, `OK · no POP`, `Blocked` (CORS), `Unreachable` (DNS/TLS/network), `Timeout`, `HTTP nnn`
+- Search, filters (problems, route changed, China-focused, IPv4-only…), sortable columns, summary strip, **Retry failed**, **auto-refresh**
+- Exports: TXT, JSON, **CSV**, copy report, and a **share link** (a compressed snapshot in the URL; it never includes your IP, ISP or location)
+- Keyboard: `/` search, `r` re-run
+
+### Live monitor
+Browser-based `ping` for any set of targets: sparkline, last / min / avg / p95 / max, **jitter**, **packet loss**, and **POP-change alerts** with an event log and CSV export. Multi-CDN endpoints (jsDelivr) rotate backends by design and are not counted as route changes.
+
+### Speed & bufferbloat
+Cloudflare speed endpoints: idle latency and jitter, download and upload (1 / 4 / 8 streams), latency under load, **bufferbloat grade (A+ to F)** and packet loss. Also a throughput test against any CORS-enabled URL.
+
+### DNS
+Compare Cloudflare and Google resolvers for any hostname (latency cold / warm, CNAME chain, A / AAAA, TTL), detect your **actual system resolver** and EDNS subnet, and flag when resolvers return different answers (resolver-based steering). One click resolves every endpoint to show which CDN is behind each hostname.
+
+### IPv4 vs IPv6
+Forced-family probes (Cloudflare `1.1.1.1` literals, ipify, icanhazip, ident.me, Google) compare the two paths side by side, including whether Cloudflare serves each from a different POP.
+
+### History & compare
+The last 30 full runs are stored in your browser. Compare any two runs (or the current view) with per-CDN deltas, POP changes and trend sparklines. Import an exported JSON report to compare against another network, VPN or day.
 
 ---
 
 ## Supported CDNs
 
-- Akamai (standard, Video, Edge IP Binding)
-- Apple Edge
-- AWS CloudFront
-- Bunny (Standard + Volume)
-- ByteDance (Global + Overseas)
-- CacheFly
-- CDN77
-- CDNetworks
-- Cloudflare and Cloudflare China Network
-- Fastly
-- GCP Anycast LB
-- jsDelivr (multi-CDN: Cloudflare / Fastly / Gcore)
-- Medianova
-- Melbicom / SwiftyCDN
-- NetEase
-- OVH CDN
-- QUANTIL
-- Tencent EdgeOne
-- Virtuozzo CDN
-- Zenlayer
-- Latency-only (no POP header exposed to browsers): Google Cloud CDN, Microsoft Azure CDN, KeyCDN
+Akamai (standard, Video, Edge IP Binding), Apple Edge, AWS CloudFront, Bunny (Standard + Volume), ByteDance (Global + Overseas), CacheFly, CDN77, CDNetworks, Cloudflare, Cloudflare China Network, Fastly, GCP Anycast LB, jsDelivr (multi-CDN), Medianova, Melbicom / SwiftyCDN, NetEase, OVH CDN, QUANTIL, Tencent EdgeOne, Virtuozzo CDN, Zenlayer.
+
+Latency-only (no POP header exposed to browsers): Google Cloud CDN, Microsoft Azure CDN, KeyCDN.
 
 Gcore has no dedicated test: its previous test host stopped working, and `gcore.com` does not expose its POP header to browsers. It still shows up as a backend of the jsDelivr row.
 
@@ -90,9 +87,10 @@ No backend required.
 
 ## Exporting Results
 
-- **Export TXT** — saves a formatted report  
+- **TXT / JSON / CSV** — formatted report or raw data  
 - **Copy** — copies the full report to clipboard  
-- **Header Inspector** — click *View* to see raw headers  
+- **Share** — copies a link that reproduces your results for someone else  
+- **Header Inspector** — click *View* to see raw headers, timing and samples  
 
 ---
 
@@ -101,6 +99,7 @@ No backend required.
 - Some CDNs hide POP headers (will show `Hidden / N/A`)  
 - Browser CORS may block certain headers depending on network  
 - Browsers cannot report which IP family each CDN request used; only client-side IPv4/IPv6 availability is shown  
+- Distance / efficiency is an estimate: it needs a known POP location and your own location, and the ideal RTT is a physical lower bound  
 - Cache status and POP headers are only readable when the CDN sends `Access-Control-Expose-Headers`  
 - Results depend on your current network route / ISP / VPN  
 
@@ -111,7 +110,8 @@ No backend required.
 - No tracking  
 - No analytics  
 - No data leaves your browser (except normal CDN test requests)  
-- Public IP lookup uses `https://ipinfo.io`, and `api.ipify.org` / `api6.ipify.org` for IPv4 / IPv6  
-- Run history stays in your browser's `localStorage` and is never sent anywhere  
+- Third-party calls: `ipinfo.io` (your IP, ISP, location, and geolocation of CDN IPs), `api.ipify.org` / `api6.ipify.org`, `cloudflare-dns.com` and `dns.google` (DNS-over-HTTPS), `edns.ip-api.com` (system resolver detection), `speed.cloudflare.com` (speed test, client POP)  
+- History, custom targets and geolocation cache stay in your browser's `localStorage` and are never sent anywhere  
+- Share links contain only measurements, never your IP, ISP or location  
 
 ---
