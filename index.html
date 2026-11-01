@@ -149,18 +149,19 @@ h1{ margin:0 0 8px; font-size:28px; letter-spacing:.2px; }
     flex:1 1 100%;
     justify-content:center;
   }
-  .colDetails{ display:none; }
-  .colCdn{ width:170px; }
-  .colNode{ width:200px; }
-  .colLatency{ width:75px; }
-  .colHeaders{ width:90px; }
-  .colStatus{ width:100px; }
-  table{ min-width:635px; }
+  .colDetails, .colCache{ display:none; }
+  .colCdn{ width:150px; }
+  .colNode{ width:170px; }
+  .colLoc{ width:120px; }
+  .colLatency{ width:110px; }
+  .colHeaders{ width:80px; }
+  .colStatus{ width:110px; }
+  table{ min-width:740px; }
 }
 
 @media (max-width: 400px) {
-  .colLatency{ display:none; }
-  table{ min-width:560px; }
+  .colLoc{ display:none; }
+  table{ min-width:620px; }
 }
 
 .stat{
@@ -208,7 +209,7 @@ table{
   width:100%;
   border-collapse:separate;
   border-spacing:0;
-  min-width:980px;
+  min-width:1205px;
   table-layout:fixed;
 }
 
@@ -236,12 +237,38 @@ tbody td{
 
 tbody tr:hover td{ background:rgba(255,255,255,.02); }
 
-.colCdn{ width:240px; }
-.colNode{ width:320px; }
-.colDetails{ width:240px; }
-.colHeaders{ width:110px; }
-.colLatency{ width:90px; text-align:right; }
+.colCdn{ width:190px; }
+.colNode{ width:200px; }
+.colLoc{ width:140px; }
+.colCache{ width:110px; }
+.colDetails{ width:200px; }
+.colHeaders{ width:80px; }
+.colLatency{ width:165px; text-align:right; }
 .colStatus{ width:120px; text-align:right; }
+
+th.sortable{ cursor:pointer; }
+th.sortable:hover{ color:#fff; }
+th .arrow{ opacity:.8; margin-left:4px; font-size:10px; }
+
+.subLine{ white-space:nowrap; font-size:11px; color:var(--muted); margin-top:3px; font-family:var(--mono); }
+.dUp{ color:var(--bad); } .dDown{ color:var(--good); }
+.badgeInfo{ background:rgba(124,92,255,.18); color:#b6a6ff; }
+.spin{
+  width:12px; height:12px; border-radius:50%;
+  border:2px solid rgba(255,255,255,.18); border-top-color:var(--green);
+  display:inline-block; animation:spin .8s linear infinite; vertical-align:middle;
+}
+@keyframes spin{ to{ transform:rotate(360deg); } }
+
+.controls{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.controls label{ font-size:12px; color:var(--muted); display:inline-flex; align-items:center; gap:6px; }
+.controls select{
+  background:rgba(0,0,0,.35); color:var(--text);
+  border:1px solid var(--stroke); border-radius:8px; padding:6px 8px; font-size:12px;
+}
+.summary{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+.summary:empty{ display:none; }
+.summary .pill b{ color:var(--text); }
 
 .nodeText{
   white-space:normal;
@@ -322,7 +349,7 @@ pre{
 <header>
   <div>
     <h1>CDN Node Lookup</h1>
-    <div class="sub">Browser-only CDN POP checker. Runs parallel probes, extracts node/POP identifiers from headers/trace, and provides a header inspector + TXT export.</div>
+    <div class="sub">Browser-only CDN POP checker. Runs parallel probes, extracts node/POP identifiers from headers/trace, and measures cold/warm latency, and provides a header inspector + TXT/JSON export.</div>
     <div class="pills">
       <span class="pill">Beta</span>
       <span class="pill" id="pillTestCount">— tests</span>
@@ -348,7 +375,7 @@ pre{
         <div class="v" id="ua"></div>
       </div>
       <div class="stat">
-        <div class="k">Public IP</div>
+        <div class="k">Public IP <span class="kbd">v4 / v6</span></div>
         <div class="v" id="ip">Detecting…</div>
       </div>
       <div class="stat">
@@ -365,19 +392,32 @@ pre{
 <section class="card">
   <div class="cardHd">
     <h2>Results</h2>
-    <div class="pill"><span id="countOk">0</span>/<span id="countTotal">0</span> OK</div>
+    <div class="controls">
+      <label>Samples
+        <select id="selSamples"><option value="1">1</option><option value="3" selected>3</option><option value="5">5</option></select>
+      </label>
+      <label>Parallel
+        <select id="selConc"><option value="4">4</option><option value="6" selected>6</option><option value="12">12</option><option value="99">All</option></select>
+      </label>
+      <button class="smallBtn" id="btnRetry" disabled>↻ Retry failed</button>
+      <button class="smallBtn" id="btnClearHist">Clear history</button>
+      <div class="pill"><span id="countOk">0</span>/<span id="countTotal">0</span> OK</div>
+    </div>
   </div>
   <div class="cardBd">
+    <div class="summary" id="summary"></div>
     <div class="tableWrap">
       <table id="table">
         <thead>
           <tr>
-            <th class="colCdn">CDN</th>
-            <th class="colNode">Node / POP</th>
+            <th class="colCdn sortable" data-sort="name">CDN<span class="arrow"></span></th>
+            <th class="colNode sortable" data-sort="node">Node / POP<span class="arrow"></span></th>
+            <th class="colLoc sortable" data-sort="loc">Location<span class="arrow"></span></th>
+            <th class="colCache sortable" data-sort="cache">Cache<span class="arrow"></span></th>
             <th class="colDetails">Details</th>
             <th class="colHeaders">Headers</th>
-            <th class="colLatency" style="text-align:right;">Latency</th>
-            <th class="colStatus" style="text-align:right;">Status</th>
+            <th class="colLatency sortable" data-sort="latency" style="text-align:right;">Latency<span class="arrow"></span></th>
+            <th class="colStatus sortable" data-sort="status" style="text-align:right;">Status<span class="arrow"></span></th>
           </tr>
         </thead>
         <tbody id="results"></tbody>
@@ -405,40 +445,104 @@ pre{
 </div>
 
 <script>
+const $ = (id) => document.getElementById(id);
+
 // ---------- client info ----------
-document.getElementById("ua").textContent = navigator.userAgent;
+$("ua").textContent = navigator.userAgent;
 
-fetch("https://ipinfo.io/json", {cache:"no-store"})
-  .then(r => r.json())
-  .then(j => {
-    document.getElementById("ip").textContent = j.ip || "Unknown";
-    document.getElementById("asn").textContent = j.org || "Unknown";
-  })
-  .catch(() => {
-    document.getElementById("ip").textContent = "Unavailable";
-    document.getElementById("asn").textContent = "Unavailable";
-  });
+const clientInfo = { ip: "Detecting…", ipv4: "…", ipv6: "…", asn: "Detecting…", location: "" };
 
-// ---------- full test list (v10-style, +Apple, -G-Core) ----------
+async function fetchJson(url, ms = 6000){
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms);
+  try{
+    const r = await fetch(url, { cache: "no-store", signal: ctl.signal });
+    return await r.json();
+  } finally { clearTimeout(t); }
+}
+
+function renderClient(){
+  $("ip").textContent = `${clientInfo.ip}\nIPv4: ${clientInfo.ipv4}\nIPv6: ${clientInfo.ipv6}`;
+  $("asn").textContent = clientInfo.asn + (clientInfo.location ? `\n${clientInfo.location}` : "");
+}
+renderClient();
+
+fetchJson("https://ipinfo.io/json").then(j => {
+  clientInfo.ip = j.ip || "Unknown";
+  clientInfo.asn = j.org || "Unknown";
+  clientInfo.location = [j.city, j.region, j.country].filter(Boolean).join(", ");
+}).catch(() => {
+  clientInfo.ip = "Unavailable";
+  clientInfo.asn = "Unavailable";
+}).finally(renderClient);
+
+// Separate v4-only / v6-only endpoints tell us which IP families this network can actually use.
+fetchJson("https://api.ipify.org?format=json").then(j => { clientInfo.ipv4 = j.ip || "Unavailable"; })
+  .catch(() => { clientInfo.ipv4 = "Not available"; }).finally(renderClient);
+fetchJson("https://api6.ipify.org?format=json").then(j => { clientInfo.ipv6 = j.ip || "Unavailable"; })
+  .catch(() => { clientInfo.ipv6 = "Not available"; }).finally(renderClient);
+
+// ---------- IATA code -> city (for POP codes) ----------
+const IATA = Object.fromEntries(`
+ABQ:Albuquerque,ADL:Adelaide,AKL:Auckland,ALA:Almaty,AMD:Ahmedabad,AMS:Amsterdam,ANC:Anchorage,ARN:Stockholm,ATH:Athens,ATL:Atlanta,
+AUH:Abu Dhabi,BAH:Bahrain,BCN:Barcelona,BEG:Belgrade,BHM:Birmingham (US),BKK:Bangkok,BLR:Bengaluru,BNA:Nashville,BNE:Brisbane,BOG:Bogotá,
+BOM:Mumbai,BOS:Boston,BRU:Brussels,BUD:Budapest,BUF:Buffalo,CAI:Cairo,CAN:Guangzhou,CBR:Canberra,CCU:Kolkata,CDG:Paris,CGK:Jakarta,
+CHC:Christchurch,CKG:Chongqing,CLE:Cleveland,CLT:Charlotte,CMB:Colombo,CMH:Columbus,CNX:Chiang Mai,COK:Kochi,CPH:Copenhagen,CPT:Cape Town,
+CTS:Sapporo,CTU:Chengdu,DAC:Dhaka,DEL:Delhi,DEN:Denver,DFW:Dallas,DME:Moscow,DMM:Dammam,DOH:Doha,DTW:Detroit,DUB:Dublin,DUS:Düsseldorf,
+DXB:Dubai,ELP:El Paso,EVN:Yerevan,EWR:Newark,EZE:Buenos Aires,FCO:Rome,FOR:Fortaleza,FRA:Frankfurt,FUK:Fukuoka,GIG:Rio de Janeiro,
+GRU:São Paulo,GVA:Geneva,GYD:Baku,HAM:Hamburg,HAN:Hanoi,HEL:Helsinki,HGH:Hangzhou,HKG:Hong Kong,HND:Tokyo (Haneda),HNL:Honolulu,
+HYD:Hyderabad,IAD:Washington DC,IAH:Houston,ICN:Seoul,IND:Indianapolis,IST:Istanbul,ITM:Osaka,JAX:Jacksonville,JED:Jeddah,JNB:Johannesburg,
+KBP:Kyiv,KHH:Kaohsiung,KIV:Chișinău,KIX:Osaka (Kansai),KRK:Kraków,KTM:Kathmandu,KUL:Kuala Lumpur,KWI:Kuwait,LAS:Las Vegas,LAX:Los Angeles,
+LCA:Larnaca,LGA:New York,LHR:London,LIM:Lima,LIS:Lisbon,LIT:Little Rock,LOS:Lagos,LUX:Luxembourg,MAA:Chennai,MAD:Madrid,MAN:Manchester,
+MBA:Mombasa,MCI:Kansas City,MCT:Muscat,MEL:Melbourne,MEX:Mexico City,MFE:McAllen,MIA:Miami,MKE:Milwaukee,MLE:Malé,MNL:Manila,MRS:Marseille,
+MSP:Minneapolis,MSY:New Orleans,MUC:Munich,MXP:Milan,NBO:Nairobi,NGO:Nagoya,NKG:Nanjing,NRT:Tokyo (Narita),OKA:Okinawa,OKC:Oklahoma City,
+OMA:Omaha,ORD:Chicago,ORF:Norfolk,OSL:Oslo,OTP:Bucharest,PAO:Palo Alto,PEK:Beijing,PER:Perth,PHL:Philadelphia,PHX:Phoenix,PIT:Pittsburgh,
+PMO:Palermo,PNH:Phnom Penh,PNQ:Pune,PRG:Prague,PTY:Panama City,PVG:Shanghai,QRO:Querétaro,RGN:Yangon,RIC:Richmond,RIX:Riga,RUH:Riyadh,
+SAN:San Diego,SAT:San Antonio,SCL:Santiago,SEA:Seattle,SFO:San Francisco,SGN:Ho Chi Minh City,SIN:Singapore,SJC:San Jose,SKG:Thessaloniki,
+SLC:Salt Lake City,SMF:Sacramento,SOF:Sofia,STL:St. Louis,SYD:Sydney,SZX:Shenzhen,TAS:Tashkent,TBS:Tbilisi,TLL:Tallinn,TLV:Tel Aviv,
+TPA:Tampa,TPE:Taipei,TSN:Tianjin,TUL:Tulsa,TUN:Tunis,ULN:Ulaanbaatar,VIE:Vienna,VNO:Vilnius,WAW:Warsaw,WLG:Wellington,WUH:Wuhan,
+XIY:Xi'an,YUL:Montréal,YVR:Vancouver,YWG:Winnipeg,YYC:Calgary,YYZ:Toronto,ZAG:Zagreb,ZRH:Zurich
+`.split(",").map(x => x.trim()).filter(Boolean).map(x => { const i = x.indexOf(":"); return [x.slice(0, i), x.slice(i + 1)]; }));
+
+// Looks for airport-style POP codes in a node string. Tokens must be upper-case (or the whole
+// node a single 3-letter token) so ordinary words like "man" or "den" are not misread as POPs.
+function cityFor(node){
+  if(!node) return "";
+  const out = [];
+  const whole = /^[A-Za-z]{3}$/.test(node.trim());
+  for(const tok of node.split(/[^A-Za-z]+/)){
+    if(tok.length !== 3) continue;
+    if(tok !== tok.toUpperCase() && !whole) continue;
+    const city = IATA[tok.toUpperCase()];
+    if(city && !out.includes(city)) out.push(city);
+  }
+  return out.join(", ");
+}
+
+// ---------- full test list ----------
+// latencyOnly: endpoint does not expose a POP header to browsers, so it is only useful for latency.
 const cdnsRaw = [
   {name:"Apple Edge", url:"https://test.edge.apple/who", type:"text"},
   {name:"Cloudflare", url:"https://cloudflare.com/cdn-cgi/trace", type:"trace"},
   {name:"Cloudflare CN", url:"https://perfops.cloudflareperf.com/cdn-cgi/trace", type:"trace"},
-  {name:"Fastly", url:"https://any.pops.fastly-analytics.com", header:"x-served-by", parse: (h)=>parseFastly(h.get("x-served-by"))},
-  {name:"jsDelivr", url:"https://cdn.jsdelivr.net/npm/latency-test@1.0.0/generate_200", parse: (h)=>parseJsDelivr(h)},
+  {name:"Fastly", url:"https://any.pops.fastly-analytics.com", parse:(h)=>parseFastly(h.get("x-served-by"))},
+  {name:"jsDelivr", url:"https://cdn.jsdelivr.net/npm/latency-test@1.0.0/generate_200", parse:(h)=>parseJsDelivr(h), note:"multi-CDN endpoint"},
   {name:"AWS CloudFront", url:"https://djlzvy5xcvhxt.cloudfront.net/500b-bench.jpg", parse:(h)=>pick(h.get("x-amz-cf-pop"), v=>v.split(";")[0])},
   {name:"GCP Anycast LB", url:"https://global.gcping.com/api/ping", type:"text"},
+  {name:"Google Cloud CDN", url:"https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js", latencyOnly:true},
   {name:"Akamai", url:"https://akamai-cdn.perfops.io/500b-bench.jpg", parse:(h)=>pick(h.get("x-cache2"), v=>v.split("|")[2] || null)},
   {name:"Akamai Video", url:"https://perfopsrum.akamaized.net/500b-bench.jpg", parse:(h)=>pick(h.get("x-cache2"), v=>v.split("|")[2] || null)},
   {name:"Akamai Edge IP Binding", url:"https://perfopsrum-eip.akamaized.net/500b-bench.jpg", parse:(h)=>pick(h.get("x-cache2"), v=>v.split("|")[2] || null)},
-  {name:"Bunny Standard", url:"https://test.b-cdn.net", parse:(h)=>parseBunny(h.get("server")||h.get("Server"))},
-  {name:"Bunny Volume", url:"https://testvideo.b-cdn.net", parse:(h)=>parseBunny(h.get("server")||h.get("Server"))},
+  {name:"Bunny Standard", url:"https://test.b-cdn.net", parse:(h)=>parseBunny(h.get("server"))},
+  {name:"Bunny Volume", url:"https://testvideo.b-cdn.net", parse:(h)=>parseBunny(h.get("server"))},
   {name:"CDN77", url:"https://1596384882.rsc.cdn77.org/500b-bench.jpg", parse:(h)=>h.get("x-77-pop")},
   {name:"Tencent EdgeOne Static", url:"https://eo-static-perfops2.qcloudcdn.com/500b-bench.jpg", parse:(h)=>parseXcc(h.get("xcc"))},
   {name:"Virtuozzo (CDN.net)", url:"https://perfops.r.worldssl.net/500b-bench.jpg", parse:(h)=>h.get("x-edge-location")},
   {name:"OVH CDN", url:"https://ovh-cdn.perfops.io/500b-bench.jpg", parse:(h)=>h.get("x-cdn-pop")},
   {name:"CacheFly", url:"https://cdnperf.cachefly.net/500b-bench.jpg", parse:(h)=>parseCacheFly(h.get("x-cf1"))},
-  {name:"Medianova", url:"https://medianova-cdnvperf.mncdn.com/500b-bench.jpg", parse:(h)=>h.get("X-Edge-Location")||h.get("x-edge-location")},
+  {name:"KeyCDN", url:"https://www.keycdn.com/favicon.ico", parse:(h)=>h.get("x-edge-location"), latencyOnly:true},
+  {name:"Medianova", url:"https://medianova-cdnvperf.mncdn.com/500b-bench.jpg", parse:(h)=>h.get("x-edge-location")},
+  {name:"Microsoft Azure CDN", url:"https://ajax.aspnetcdn.com/ajax/jQuery/jquery-3.7.1.min.js", latencyOnly:true},
   {name:"Zenlayer", url:"https://test-perfops.ecn.zenlayer.net/500b-bench.jpg", parse:(h)=>parseZenlayerVia(h.get("via"))},
   {name:"Melbicom (SwiftyCDN)", url:"https://perfops.swiftycdn.net/500b-sw-bench.jpg", parse:(h)=>h.get("x-swifty-node")},
   {name:"ByteDance", url:"https://perfops.byte-test.com/500b-bench.jpg", parse:(h)=>parseViaDomain(h.get("via"))},
@@ -464,12 +568,12 @@ function parseBunny(server){
   return server;
 }
 function parseJsDelivr(h){
-  const server = (h.get("Server")||h.get("server")||"").toLowerCase();
+  const server = (h.get("server")||"").toLowerCase();
   if(server.includes("cloudflare")){
     const ray = h.get("cf-ray");
     return "Cloudflare" + (ray ? ", " + ray.split("-")[1] : "");
   }
-  if(h.get("x-id") && h.get("x-cached-since")) return "G-Core Lab"; // informational only
+  if(h.get("x-id") && h.get("x-cached-since")) return "Gcore, " + h.get("x-id");
   const servedBy = h.get("x-served-by");
   const parts = servedBy ? servedBy.split("-") : null;
   return "Fastly" + (parts ? ", " + parts[parts.length-1] : "");
@@ -502,6 +606,28 @@ function parseViaPops(v){
   const matches = Array.from(v.matchAll(/-(\w+)-/g));
   return matches.length ? matches.map(m=>m[1]).join(", ") : null;
 }
+
+// Normalises the various cache-status headers into HIT / MISS / etc. Only visible when the CDN
+// exposes the header to browsers (Access-Control-Expose-Headers).
+function parseCache(h){
+  const raw = h.get("cf-cache-status") || h.get("x-cache") || h.get("x-cache-status")
+    || h.get("x-cdnjs-cache") || h.get("x-cache2") || h.get("cache");
+  const age = parseInt(h.get("age") || "", 10);
+  let label = "";
+  if(raw){
+    const hit = /hit/i.test(raw), miss = /miss/i.test(raw);
+    if(hit && miss) label = "HIT/MISS";
+    else if(hit) label = "HIT";
+    else if(miss) label = "MISS";
+    else {
+      const m = raw.match(/\b(EXPIRED|STALE|REVALIDATED|BYPASS|DYNAMIC|UPDATING)\b/i);
+      label = m ? m[1].toUpperCase() : raw.trim().slice(0, 20).toUpperCase();
+    }
+  }
+  if(Number.isFinite(age) && age > 0 && age < 86400) label = (label || "CACHED") + ` (age ${age}s)`;
+  return label;
+}
+
 function escapeHtml(s){
   return String(s ?? "")
     .replaceAll("&","&amp;")
@@ -515,64 +641,148 @@ function headersToObject(headers){
   try{ headers.forEach((v,k)=>{ obj[k]=v; }); }catch{}
   return obj;
 }
+function median(arr){
+  if(!arr.length) return null;
+  const s = [...arr].sort((a,b)=>a-b);
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m] : Math.round((s[m-1] + s[m]) / 2);
+}
 
 // ---------- state ----------
-let running = false;
-let rowsState = []; // indexed by cdns order
-let okCount = 0;
+const TIMEOUT_MS = 10000;
+const HISTORY_KEY = "cdntester.history.v1";
+const HISTORY_MAX = 10;
 
-const elResults = document.getElementById("results");
-const elBar = document.getElementById("bar");
-const elRunState = document.getElementById("runState");
-const elBtnRun = document.getElementById("btnRun");
-const elBtnExport = document.getElementById("btnExport");
-const elBtnJsonExport = document.getElementById("btnJsonExport");
-const elBtnCopy = document.getElementById("btnCopy");
-const elOk = document.getElementById("countOk");
-const elTotal = document.getElementById("countTotal");
+let running = false;
+let rowsState = [];     // indexed by cdns order
+let okCount = 0;
+let prevRun = null;     // most recent saved run, used for deltas
+let sortKey = "name";
+let sortDir = 1;
+
+const elResults = $("results");
+const elBar = $("bar");
+const elRunState = $("runState");
+const elBtnRun = $("btnRun");
+const elBtnRetry = $("btnRetry");
+const elBtnExport = $("btnExport");
+const elBtnJsonExport = $("btnJsonExport");
+const elBtnCopy = $("btnCopy");
+const elOk = $("countOk");
+const elTotal = $("countTotal");
+const elSummary = $("summary");
+
+const isGood = (r) => r.kind === "ok" || r.kind === "nopop";
+
+// ---------- history (localStorage) ----------
+function loadHistory(){
+  try{ return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]"); }catch{ return []; }
+}
+function saveRun(){
+  try{
+    const results = {};
+    for(const r of rowsState) if(isGood(r) && r.median != null) results[r.cdn] = r.median;
+    if(!Object.keys(results).length) return;
+    const hist = loadHistory();
+    hist.push({ t: new Date().toISOString(), samples: currentSamples(), results });
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(hist.slice(-HISTORY_MAX)));
+  }catch{}
+}
+function lastRun(){
+  const h = loadHistory();
+  return h.length ? h[h.length - 1] : null;
+}
+
+// ---------- UI state ----------
+const currentSamples = () => parseInt($("selSamples").value, 10) || 1;
+const currentConc = () => parseInt($("selConc").value, 10) || 6;
 
 function setRunning(on){
   running = on;
   elRunState.textContent = on ? "Running…" : "Idle";
   elBtnRun.disabled = on;
-  elBtnExport.disabled = on || rowsState.length === 0;
-  elBtnJsonExport.disabled = on || rowsState.length === 0;
-  elBtnCopy.disabled = on || rowsState.length === 0;
+  updateButtons();
 }
-
+function updateButtons(){
+  const has = rowsState.length > 0;
+  elBtnExport.disabled = running || !has;
+  elBtnJsonExport.disabled = running || !has;
+  elBtnCopy.disabled = running || !has;
+  elBtnRetry.disabled = running || !rowsState.some(r => r.kind && !isGood(r) && r.kind !== "pending");
+}
 function updateCounts(){
   elOk.textContent = String(okCount);
   elTotal.textContent = String(cdns.length);
-  elBtnExport.disabled = running || rowsState.length === 0;
-  elBtnJsonExport.disabled = running || rowsState.length === 0;
-  elBtnCopy.disabled = running || rowsState.length === 0;
+  updateButtons();
+}
+
+// ---------- rendering ----------
+const STATUS_RANK = { ok:0, nopop:1, http:2, cors:3, timeout:4, down:5, pending:6 };
+
+function sortedRows(){
+  const val = {
+    name:    (r) => r.cdn.toLowerCase(),
+    node:    (r) => (r.node || "").toLowerCase(),
+    loc:     (r) => (r.city || "").toLowerCase(),
+    cache:   (r) => (r.cache || "").toLowerCase(),
+    latency: (r) => r.median,
+    status:  (r) => STATUS_RANK[r.kind] ?? 9,
+  }[sortKey];
+  return [...rowsState].sort((a, b) => {
+    const x = val(a), y = val(b);
+    // Rows without a value always sink to the bottom, whatever the direction.
+    const nx = x == null || x === "", ny = y == null || y === "";
+    if(nx || ny) return nx === ny ? 0 : (nx ? 1 : -1);
+    return (x < y ? -1 : x > y ? 1 : 0) * sortDir;
+  });
+}
+
+function badgeFor(r){
+  switch(r.kind){
+    case "ok":      return `<span class="badge badgeOk">OK</span>`;
+    case "nopop":   return `<span class="badge badgeInfo" title="Reachable, but no POP header is exposed to the browser">OK · no POP</span>`;
+    case "http":    return `<span class="badge badgeWarn">${escapeHtml(r.status)}</span>`;
+    case "timeout": return `<span class="badge badgeWarn">Timeout</span>`;
+    case "cors":    return `<span class="badge badgeWarn" title="The host answered, but the browser blocked reading the response (CORS)">Blocked</span>`;
+    case "down":    return `<span class="badge badgeBad" title="DNS, TLS or network failure">Unreachable</span>`;
+    default:        return `<span class="spin" aria-label="loading"></span>`;
+  }
+}
+
+function latencyCell(r){
+  if(r.median == null){
+    return r.blockedMs != null
+      ? `<span class="mono" style="color:var(--muted)">~${r.blockedMs} ms</span><div class="subLine">opaque</div>`
+      : `<span class="mono" style="color:var(--muted)">—</span>`;
+  }
+  let delta = "";
+  if(prevRun && prevRun.results && prevRun.results[r.cdn] != null){
+    const d = r.median - prevRun.results[r.cdn];
+    if(d !== 0) delta = ` <span class="${d > 0 ? "dUp" : "dDown"}" title="vs last saved run">${d > 0 ? "▲" : "▼"}${Math.abs(d)}</span>`;
+  }
+  const sub = r.samples.length > 1
+    ? `cold ${r.cold} · best ${r.best}`
+    : "";
+  return `<span class="mono">${r.median} ms</span>${delta}${sub ? `<div class="subLine">${sub}</div>` : ""}`;
 }
 
 function render(){
+  document.querySelectorAll("th.sortable").forEach(th => {
+    th.querySelector(".arrow").textContent = th.dataset.sort === sortKey ? (sortDir > 0 ? "▲" : "▼") : "";
+  });
   elResults.innerHTML = "";
-  for(const r of rowsState){
-    let badge;
-    if(r.status === "OK"){
-      badge = `<span class="badge badgeOk">OK</span>`;
-    } else if(r.status === "Timeout"){
-      badge = `<span class="badge badgeWarn">Timeout</span>`;
-    } else if(r.status.startsWith("HTTP ")){
-      badge = `<span class="badge badgeWarn">${escapeHtml(r.status)}</span>`;
-    } else if(r.status === "…"){
-      badge = `<span class="badge" style="color:var(--muted)">—</span>`;
-    } else {
-      badge = `<span class="badge badgeBad">Error</span>`;
-    }
-    const latencyStr = r.latency != null ? r.latency + " ms" : "—";
-
+  for(const r of sortedRows()){
     const tr = document.createElement("tr");
+    const nodeTxt = r.node || "—";
     tr.innerHTML = `
       <td class="colCdn"><div style="font-weight:900">${escapeHtml(r.cdn)}</div></td>
-      <td class="colNode"><div class="nodeText mono">${escapeHtml(r.node || "—")}</div></td>
+      <td class="colNode"><div class="nodeText mono">${escapeHtml(nodeTxt)}</div></td>
+      <td class="colLoc"><div class="nodeText">${escapeHtml(r.city || "—")}</div></td>
+      <td class="colCache"><div class="mono" style="color:rgba(255,255,255,.75)">${escapeHtml(r.cache || "—")}</div></td>
       <td class="colDetails"><div class="mono" style="color:rgba(255,255,255,.75)">${escapeHtml(r.details || "—")}</div></td>
       <td class="colHeaders"><button class="smallBtn">View</button></td>
-      <td class="colLatency" style="text-align:right"><span class="mono" style="color:var(--muted)">${escapeHtml(latencyStr)}</span></td>
-      <td class="colStatus" style="text-align:right">${badge}</td>
+      <td class="colLatency" style="text-align:right">${latencyCell(r)}</td>
+      <td class="colStatus" style="text-align:right">${badgeFor(r)}</td>
     `;
     tr.querySelector("button").addEventListener("click", ()=>showHeaders(r));
     elResults.appendChild(tr);
@@ -580,30 +790,69 @@ function render(){
   updateCounts();
 }
 
+let renderQueued = false;
+function scheduleRender(){
+  if(renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => { renderQueued = false; render(); });
+}
+
+document.querySelectorAll("th.sortable").forEach(th => {
+  th.addEventListener("click", () => {
+    const k = th.dataset.sort;
+    if(k === sortKey) sortDir = -sortDir; else { sortKey = k; sortDir = 1; }
+    render();
+  });
+});
+
+function renderSummary(){
+  const good = rowsState.filter(r => isGood(r) && r.median != null);
+  const failed = rowsState.filter(r => r.kind && r.kind !== "pending" && !isGood(r));
+  if(!good.length && !failed.length){ elSummary.innerHTML = ""; return; }
+  const pill = (k, v) => `<span class="pill">${k} <b>${escapeHtml(v)}</b></span>`;
+  const parts = [];
+  if(good.length){
+    const byLat = [...good].sort((a,b) => a.median - b.median);
+    const f = byLat[0], s = byLat[byLat.length - 1];
+    parts.push(pill("Fastest", `${f.cdn} · ${f.median} ms`));
+    parts.push(pill("Slowest", `${s.cdn} · ${s.median} ms`));
+    parts.push(pill("Median", `${median(good.map(r => r.median))} ms`));
+    if(prevRun && prevRun.results){
+      const ds = good.filter(r => prevRun.results[r.cdn] != null).map(r => r.median - prevRun.results[r.cdn]);
+      if(ds.length){
+        const avg = Math.round(ds.reduce((a,b) => a + b, 0) / ds.length);
+        parts.push(pill("vs last run", `${avg > 0 ? "+" : ""}${avg} ms avg`));
+      }
+    }
+  }
+  if(failed.length) parts.push(pill("Failed", `${failed.length}: ${failed.map(r => r.cdn).join(", ")}`));
+  elSummary.innerHTML = parts.join("");
+}
+
 // ---------- modal ----------
-const modal = document.getElementById("modal");
-const modalTitle = document.getElementById("modalTitle");
-const modalSub = document.getElementById("modalSub");
-const modalText = document.getElementById("modalText");
-document.getElementById("btnClose").addEventListener("click", ()=>{ modal.style.display="none"; });
+const modal = $("modal");
+$("btnClose").addEventListener("click", ()=>{ modal.style.display="none"; });
 modal.addEventListener("click", (e)=>{ if(e.target === modal) modal.style.display="none"; });
+document.addEventListener("keydown", (e)=>{ if(e.key === "Escape") modal.style.display="none"; });
 
 function showHeaders(row){
-  modalTitle.textContent = `Header Inspector — ${row.cdn}`;
-  modalSub.textContent = row.url;
-  const payload = {
-    cdn: row.cdn,
-    node: row.node,
-    details: row.details,
-    status: row.status,
-    url: row.url,
-    headers: row.headers,
-  };
-  modalText.textContent = JSON.stringify(payload, null, 2);
+  $("modalTitle").textContent = `Header Inspector — ${row.cdn}`;
+  $("modalSub").textContent = row.url;
+  $("modalText").textContent = JSON.stringify(exportRow(row), null, 2);
   modal.style.display = "flex";
 }
 
 // ---------- report / export / copy ----------
+function exportRow(r){
+  return {
+    cdn: r.cdn, url: r.url, status: r.status, kind: r.kind,
+    node: r.node, city: r.city, cache: r.cache, details: r.details, protocol: r.proto,
+    latencyMs: { median: r.median, cold: r.cold, best: r.best, samples: r.samples },
+    timing: r.timing,
+    headers: r.headers,
+  };
+}
+
 function generateReport(){
   const lines = [];
   lines.push("CDN NODE LOOKUP REPORT");
@@ -611,137 +860,259 @@ function generateReport(){
   lines.push("Generated: " + new Date().toISOString());
   lines.push("");
   lines.push("User Agent: " + navigator.userAgent);
-  lines.push("IP: " + document.getElementById("ip").textContent);
-  lines.push("ASN: " + document.getElementById("asn").textContent);
+  lines.push("IP: " + clientInfo.ip + " (IPv4: " + clientInfo.ipv4 + ", IPv6: " + clientInfo.ipv6 + ")");
+  lines.push("ASN: " + clientInfo.asn + (clientInfo.location ? " — " + clientInfo.location : ""));
+  lines.push("Samples per CDN: " + currentSamples());
   lines.push("");
-  lines.push("Results");
+  lines.push("Results (latency = median of warm samples; cold = first request incl. connection setup)");
   lines.push("----------------------");
-  for(const r of rowsState){
-    const lat = r.latency != null ? ` — ${r.latency}ms` : "";
-    lines.push(`${r.cdn} — ${r.node || "—"} — ${r.details || "—"} — ${r.status}${lat}`);
+  for(const r of sortedRows()){
+    const lat = r.median != null
+      ? ` — ${r.median}ms` + (r.samples.length > 1 ? ` (cold ${r.cold}, best ${r.best})` : "")
+      : "";
+    const city = r.city ? ` (${r.city})` : "";
+    const cache = r.cache ? ` — cache ${r.cache}` : "";
+    lines.push(`${r.cdn} — ${r.node || "—"}${city}${cache} — ${r.details || "—"} — ${r.status}${lat}`);
   }
   return lines.join("\n");
 }
 
-elBtnExport.addEventListener("click", ()=>{
-  const blob = new Blob([generateReport()], {type:"text/plain;charset=utf-8"});
+function download(name, type, text){
+  const blob = new Blob([text], {type});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "cdn-report.txt";
+  a.download = name;
   a.click();
   URL.revokeObjectURL(a.href);
-});
-
-elBtnCopy.addEventListener("click", async ()=>{
-  await navigator.clipboard.writeText(generateReport());
-  const old = elBtnCopy.textContent;
-  elBtnCopy.textContent = "✅ Copied";
-  setTimeout(()=> elBtnCopy.textContent = old, 1400);
-});
-
-// ---------- runner ----------
-async function run(){
-  if(running) return;
-  setRunning(true);
-  elBar.style.width = "0%";
-  okCount = 0;
-
-  rowsState = cdns.map(c => ({cdn:c.name, node:"Checking…", details:"—", status:"…", headers:{}, url:c.url, latency:null}));
-  render();
-
-  const total = cdns.length;
-  let done = 0;
-
-  const tasks = cdns.map(async (c, idx) => {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
-    const t0 = performance.now();
-    try{
-      const res = await fetch(c.url, {cache:"no-store", signal: controller.signal});
-      clearTimeout(timeoutId);
-      const latency = Math.round(performance.now() - t0);
-      const headersObj = headersToObject(res.headers);
-
-      let node = null;
-      let details = "";
-
-      if(c.type === "trace"){
-        const text = await res.text();
-        const m = text.match(/colo=(.*)/);
-        node = m ? m[1] : null;
-        details = "cloudflare trace";
-      } else if(c.type === "text"){
-        node = (await res.text()).trim();
-        details = "text endpoint";
-      } else {
-        node = c.parse ? c.parse(res.headers) : null;
-        if(!node){
-          // fallback: try common headers
-          node = res.headers.get("x-served-by")
-            || res.headers.get("x-amz-cf-pop")
-            || res.headers.get("x-77-pop")
-            || res.headers.get("x-cdn-pop")
-            || res.headers.get("x-edge-location")
-            || res.headers.get("via")
-            || "Hidden / N/A";
-        }
-        details = (res.headers.get("server") || res.headers.get("Server") || "").slice(0, 60) || "—";
-      }
-
-      if(res.ok) okCount++;
-
-      rowsState[idx] = {
-        cdn: c.name,
-        node: node || "Hidden / N/A",
-        details: details || "—",
-        status: res.ok ? "OK" : ("HTTP " + res.status),
-        headers: headersObj,
-        url: c.url,
-        latency,
-      };
-    } catch (e){
-      clearTimeout(timeoutId);
-      rowsState[idx] = {
-        cdn: c.name,
-        node: "Failed",
-        details: e.name === "AbortError" ? "Timeout (10s)" : (e.message || "Network error"),
-        status: e.name === "AbortError" ? "Timeout" : "Error",
-        headers: {},
-        url: c.url,
-        latency: null,
-      };
-    } finally {
-      done++;
-      elBar.style.width = Math.round((done/total)*100) + "%";
-      if(done === total || done % 3 === 0) render();
-    }
-  });
-
-  await Promise.all(tasks);
-  setRunning(false);
-  render();
 }
 
+elBtnExport.addEventListener("click", ()=> download("cdn-report.txt", "text/plain;charset=utf-8", generateReport()));
 elBtnJsonExport.addEventListener("click", ()=>{
   const data = {
     generated: new Date().toISOString(),
     userAgent: navigator.userAgent,
-    ip: document.getElementById("ip").textContent,
-    asn: document.getElementById("asn").textContent,
-    results: rowsState,
+    client: clientInfo,
+    samples: currentSamples(),
+    results: rowsState.map(exportRow),
   };
-  const blob = new Blob([JSON.stringify(data, null, 2)], {type:"application/json;charset=utf-8"});
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "cdn-report.json";
-  a.click();
-  URL.revokeObjectURL(a.href);
+  download("cdn-report.json", "application/json;charset=utf-8", JSON.stringify(data, null, 2));
+});
+elBtnCopy.addEventListener("click", async ()=>{
+  const old = elBtnCopy.textContent;
+  try{
+    await navigator.clipboard.writeText(generateReport());
+    elBtnCopy.textContent = "✅ Copied";
+  }catch{
+    elBtnCopy.textContent = "⚠️ Copy failed";
+  }
+  setTimeout(()=> elBtnCopy.textContent = old, 1400);
 });
 
+// ---------- probing ----------
+function blankRow(c){
+  return {
+    cdn:c.name, url:c.url, kind:"pending", status:"…", node:"Checking…", city:"", cache:"",
+    details:"—", proto:"", headers:{}, timing:null,
+    samples:[], cold:null, median:null, best:null, blockedMs:null,
+  };
+}
+
+function readTiming(url, t0){
+  const es = performance.getEntriesByName(url).filter(e => e.startTime >= t0 - 5);
+  const e = es[es.length - 1];
+  if(!e) return null;
+  // Cross-origin entries are zeroed unless the CDN sends Timing-Allow-Origin.
+  const r = (v) => Math.round(v);
+  return {
+    protocol: e.nextHopProtocol || "",
+    dnsMs: e.domainLookupEnd > 0 ? r(e.domainLookupEnd - e.domainLookupStart) : null,
+    connectMs: e.connectEnd > 0 ? r(e.connectEnd - e.connectStart) : null,
+    tlsMs: e.secureConnectionStart > 0 ? r(e.connectEnd - e.secureConnectionStart) : null,
+    ttfbMs: e.requestStart > 0 && e.responseStart > 0 ? r(e.responseStart - e.requestStart) : null,
+    totalMs: r(e.duration),
+  };
+}
+
+// First request: reads headers/body for POP detection and records cold latency (time to headers).
+async function firstSample(c){
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+  const t0 = performance.now();
+  try{
+    const res = await fetch(c.url, { cache:"no-store", signal: ctl.signal });
+    const ms = Math.round(performance.now() - t0);
+    let text = null;
+    if(c.type) text = await res.text().catch(() => "");
+    else await res.arrayBuffer().catch(() => {});
+    clearTimeout(timer);
+    await new Promise(r => setTimeout(r, 0)); // let the Resource Timing entry land
+    return { res, ms, text, timing: readTiming(c.url, t0) };
+  }catch(e){
+    clearTimeout(timer);
+    throw e;
+  }
+}
+
+// Follow-up requests reuse the open connection, so they approximate pure edge response time.
+async function warmSample(c){
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+  const t0 = performance.now();
+  try{
+    const res = await fetch(c.url, { cache:"no-store", signal: ctl.signal });
+    const ms = Math.round(performance.now() - t0);
+    try{ await res.body?.cancel(); }catch{}
+    return ms;
+  } finally { clearTimeout(timer); }
+}
+
+// A failed CORS fetch is ambiguous in browsers. A no-cors retry tells "host answered, but we
+// are not allowed to read it" apart from "host is unreachable".
+async function classifyFailure(c, err){
+  if(err && err.name === "AbortError") return { kind:"timeout", status:"Timeout", details:`Timeout (${TIMEOUT_MS/1000}s)` };
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 5000);
+  const t0 = performance.now();
+  try{
+    await fetch(c.url, { mode:"no-cors", cache:"no-store", signal: ctl.signal });
+    return { kind:"cors", status:"Blocked", details:"Reachable, but CORS blocks reading the response", blockedMs: Math.round(performance.now() - t0) };
+  }catch{
+    return { kind:"down", status:"Unreachable", details:(err && err.message) || "DNS / TLS / network error" };
+  } finally { clearTimeout(timer); }
+}
+
+const FALLBACK_HEADERS = ["x-served-by","x-amz-cf-pop","x-77-pop","x-cdn-pop","x-edge-location","via"];
+
+async function probe(idx){
+  const c = cdns[idx];
+  const row = blankRow(c);
+  rowsState[idx] = row;
+  const nSamples = currentSamples();
+
+  let first;
+  try{
+    first = await firstSample(c);
+  }catch(e){
+    Object.assign(row, { node:"Failed", ...(await classifyFailure(c, e)) });
+    return;
+  }
+
+  const { res, text, timing } = first;
+  let node = null, fallbackFrom = null, details = [];
+
+  if(c.type === "trace"){
+    const m = (text || "").match(/colo=(\S+)/);
+    node = m ? m[1] : null;
+    details.push("cloudflare trace");
+  } else if(c.type === "text"){
+    node = (text || "").trim().slice(0, 120) || null;
+    details.push("text endpoint");
+  } else {
+    node = c.parse ? c.parse(res.headers) : null;
+    if(!node && !c.latencyOnly){
+      for(const name of FALLBACK_HEADERS){
+        const v = res.headers.get(name);
+        if(v){ node = v; fallbackFrom = name; break; }
+      }
+    }
+    const server = (res.headers.get("server") || "").slice(0, 40);
+    if(server) details.push(server);
+  }
+  if(fallbackFrom) details.push(`fallback: ${fallbackFrom}`);
+  if(timing && timing.protocol) details.push(timing.protocol);
+  if(c.note) details.push(c.note);
+  if(c.latencyOnly && !node) details.push("latency only");
+
+  // Warm samples.
+  const samples = [first.ms];
+  for(let i = 1; i < nSamples; i++){
+    try{ samples.push(await warmSample(c)); }catch{ break; }
+  }
+  const warm = samples.slice(1);
+
+  const hidden = !node;
+  Object.assign(row, {
+    node: node || (c.latencyOnly ? "n/a (latency only)" : "Hidden / N/A"),
+    city: cityFor(node),
+    cache: parseCache(res.headers),
+    details: details.join(" · ") || "—",
+    proto: timing ? timing.protocol : "",
+    headers: headersToObject(res.headers),
+    timing,
+    samples,
+    cold: samples[0],
+    median: warm.length ? median(warm) : samples[0],
+    best: Math.min(...samples),
+    kind: !res.ok ? "http" : (hidden && !c.latencyOnly ? "nopop" : "ok"),
+    status: res.ok ? "OK" : "HTTP " + res.status,
+  });
+}
+
+async function runIndices(indices){
+  const total = indices.length;
+  let done = 0, next = 0;
+  elBar.style.width = "0%";
+  const worker = async () => {
+    while(next < total){
+      const idx = indices[next++];
+      try{ await probe(idx); }
+      catch(e){ Object.assign(rowsState[idx], { kind:"down", status:"Unreachable", node:"Failed", details:String(e && e.message || e) }); }
+      done++;
+      elBar.style.width = Math.round((done / total) * 100) + "%";
+      okCount = rowsState.filter(r => r.kind === "ok" || r.kind === "nopop").length;
+      scheduleRender();
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(currentConc(), total) }, worker));
+}
+
+async function finish(){
+  okCount = rowsState.filter(isGood).length;
+  setRunning(false);
+  render();
+  renderSummary();
+}
+
+async function run(){
+  if(running) return;
+  setRunning(true);
+  prevRun = lastRun();
+  okCount = 0;
+  try{ performance.clearResourceTimings(); performance.setResourceTimingBufferSize(1000); }catch{}
+  rowsState = cdns.map(blankRow);
+  elSummary.innerHTML = "";
+  render();
+  await runIndices(cdns.map((_, i) => i));
+  saveRun();
+  await finish();
+}
+
+async function retryFailed(){
+  if(running) return;
+  const idxs = rowsState.map((r, i) => (r.kind && r.kind !== "pending" && !isGood(r)) ? i : -1).filter(i => i >= 0);
+  if(!idxs.length) return;
+  setRunning(true);
+  for(const i of idxs) rowsState[i] = blankRow(cdns[i]);
+  render();
+  await runIndices(idxs);
+  await finish();
+}
+
 elBtnRun.addEventListener("click", run);
+elBtnRetry.addEventListener("click", retryFailed);
+$("btnClearHist").addEventListener("click", () => {
+  try{ localStorage.removeItem(HISTORY_KEY); }catch{}
+  prevRun = null;
+  render();
+  renderSummary();
+  const b = $("btnClearHist"), old = b.textContent;
+  b.textContent = "Cleared";
+  setTimeout(() => b.textContent = old, 1200);
+});
 
 // Init
-document.getElementById("pillTestCount").textContent = cdns.length + " tests";
+$("pillTestCount").textContent = cdns.length + " tests";
+elTotal.textContent = String(cdns.length);
 
 // Auto-run
 window.addEventListener("load", ()=> setTimeout(run, 450));
