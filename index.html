@@ -149,7 +149,7 @@ h1{ margin:0 0 8px; font-size:28px; letter-spacing:.2px; }
     flex:1 1 100%;
     justify-content:center;
   }
-  .colDetails, .colCache{ display:none; }
+  .colDetails, .colCache, .colIp{ display:none; }
   .colCdn{ width:150px; }
   .colNode{ width:170px; }
   .colLoc{ width:120px; }
@@ -209,7 +209,7 @@ table{
   width:100%;
   border-collapse:separate;
   border-spacing:0;
-  min-width:1205px;
+  min-width:1230px;
   table-layout:fixed;
 }
 
@@ -237,14 +237,37 @@ tbody td{
 
 tbody tr:hover td{ background:rgba(255,255,255,.02); }
 
-.colCdn{ width:190px; }
-.colNode{ width:200px; }
-.colLoc{ width:140px; }
-.colCache{ width:110px; }
-.colDetails{ width:200px; }
-.colHeaders{ width:80px; }
-.colLatency{ width:165px; text-align:right; }
-.colStatus{ width:120px; text-align:right; }
+.colCdn{ width:165px; }
+.colNode{ width:175px; }
+.colLoc{ width:150px; }
+.colIp{ width:95px; }
+.colCache{ width:105px; }
+.colDetails{ width:150px; }
+.colHeaders{ width:75px; }
+.colLatency{ width:170px; text-align:right; }
+.colStatus{ width:115px; text-align:right; }
+
+.chips{ display:flex; gap:5px; flex-wrap:wrap; }
+.chip{
+  font-family:var(--mono); font-size:11px; padding:3px 7px; border-radius:7px;
+  border:1px solid rgba(255,255,255,.10); color:rgba(255,255,255,.35);
+  background:rgba(255,255,255,.03); text-decoration:line-through;
+}
+.chip.on{ color:rgba(255,255,255,.85); text-decoration:none; background:rgba(255,255,255,.07); }
+.chip.v4.on{ border-color:rgba(96,165,250,.45); color:#93c5fd; }
+.chip.v6.on{ border-color:rgba(167,139,250,.5); color:#c4b5fd; }
+.chip.likely{ box-shadow:0 0 0 1px currentColor; font-weight:800; }
+.chip.client{ text-decoration:none; font-size:12px; padding:4px 9px; }
+.chip.client.off{ text-decoration:none; }
+.locApprox{ color:rgba(255,255,255,.80); }
+.locNone{ color:var(--muted); font-style:italic; }
+
+.lbar{ position:relative; height:5px; border-radius:99px; background:rgba(255,255,255,.07); margin-top:5px; overflow:hidden; }
+.lbar i{ position:absolute; left:0; top:0; bottom:0; border-radius:99px; }
+.lbar .cold{ background:rgba(255,255,255,.16); }
+.lbar .good{ background:var(--good); }
+.lbar .mid{ background:#fbbf24; }
+.lbar .slow{ background:var(--bad); }
 
 th.sortable{ cursor:pointer; }
 th.sortable:hover{ color:#fff; }
@@ -413,6 +436,7 @@ pre{
             <th class="colCdn sortable" data-sort="name">CDN<span class="arrow"></span></th>
             <th class="colNode sortable" data-sort="node">Node / POP<span class="arrow"></span></th>
             <th class="colLoc sortable" data-sort="loc">Location<span class="arrow"></span></th>
+            <th class="colIp sortable" data-sort="ip" title="Which IP families the endpoint has records for. Highlighted = likely used by your browser.">IPv4 / IPv6<span class="arrow"></span></th>
             <th class="colCache sortable" data-sort="cache">Cache<span class="arrow"></span></th>
             <th class="colDetails">Details</th>
             <th class="colHeaders">Headers</th>
@@ -452,19 +476,26 @@ $("ua").textContent = navigator.userAgent;
 
 const clientInfo = { ip: "Detecting…", ipv4: "…", ipv6: "…", asn: "Detecting…", location: "" };
 
-async function fetchJson(url, ms = 6000){
+async function fetchJson(url, ms = 6000, headers = {}){
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), ms);
   try{
-    const r = await fetch(url, { cache: "no-store", signal: ctl.signal });
+    const r = await fetch(url, { cache: "no-store", signal: ctl.signal, headers });
     return await r.json();
   } finally { clearTimeout(t); }
 }
 
+const isAddr = (v) => /^[0-9a-f.:]+$/i.test(v || "") && /[.:]/.test(v);
+const clientHasV6 = () => isAddr(clientInfo.ipv6) && clientInfo.ipv6.includes(":");
+
 function renderClient(){
-  $("ip").textContent = `${clientInfo.ip}\nIPv4: ${clientInfo.ipv4}\nIPv6: ${clientInfo.ipv6}`;
+  const chip = (label, val) => isAddr(val)
+    ? `<span class="chip client on ${label === "IPv4" ? "v4" : "v6"}" title="${escapeHtml(val)}">${label} ✓ ${escapeHtml(val)}</span>`
+    : `<span class="chip client off">${label} ✗ ${val === "…" ? "checking…" : "not available"}</span>`;
+  $("ip").innerHTML = `<div>${escapeHtml(clientInfo.ip)}</div><div class="chips" style="margin-top:8px">${chip("IPv4", clientInfo.ipv4)}${chip("IPv6", clientInfo.ipv6)}</div>`;
   $("asn").textContent = clientInfo.asn + (clientInfo.location ? `\n${clientInfo.location}` : "");
 }
+function clientUpdated(){ renderClient(); scheduleRender(); renderSummary(); }
 renderClient();
 
 fetchJson("https://ipinfo.io/json").then(j => {
@@ -474,13 +505,13 @@ fetchJson("https://ipinfo.io/json").then(j => {
 }).catch(() => {
   clientInfo.ip = "Unavailable";
   clientInfo.asn = "Unavailable";
-}).finally(renderClient);
+}).finally(clientUpdated);
 
 // Separate v4-only / v6-only endpoints tell us which IP families this network can actually use.
 fetchJson("https://api.ipify.org?format=json").then(j => { clientInfo.ipv4 = j.ip || "Unavailable"; })
-  .catch(() => { clientInfo.ipv4 = "Not available"; }).finally(renderClient);
+  .catch(() => { clientInfo.ipv4 = "Not available"; }).finally(clientUpdated);
 fetchJson("https://api6.ipify.org?format=json").then(j => { clientInfo.ipv6 = j.ip || "Unavailable"; })
-  .catch(() => { clientInfo.ipv6 = "Not available"; }).finally(renderClient);
+  .catch(() => { clientInfo.ipv6 = "Not available"; }).finally(clientUpdated);
 
 // ---------- IATA code -> city (for POP codes) ----------
 const IATA = Object.fromEntries(`
@@ -519,27 +550,44 @@ function cityFor(node){
   return out.join(", ");
 }
 
+// Vendor-specific code formats that are not plain airport codes.
+const CITY3 = { chi:"Chicago", nyc:"New York", was:"Washington DC", lon:"London", par:"Paris", tyo:"Tokyo", sel:"Seoul",
+  sto:"Stockholm", mil:"Milan", mow:"Moscow", osa:"Osaka", sha:"Shanghai", bjs:"Beijing", dal:"Dallas", hou:"Houston" };
+const GCP_REGIONS = { "us-east1":"South Carolina","us-east4":"N. Virginia","us-east5":"Columbus","us-central1":"Iowa","us-south1":"Dallas",
+  "us-west1":"Oregon","us-west2":"Los Angeles","us-west3":"Salt Lake City","us-west4":"Las Vegas","northamerica-northeast1":"Montréal",
+  "northamerica-northeast2":"Toronto","southamerica-east1":"São Paulo","southamerica-west1":"Santiago","europe-west1":"Belgium",
+  "europe-west2":"London","europe-west3":"Frankfurt","europe-west4":"Netherlands","europe-west6":"Zurich","europe-west8":"Milan",
+  "europe-west9":"Paris","europe-north1":"Finland","europe-central2":"Warsaw","europe-southwest1":"Madrid","asia-east1":"Taiwan",
+  "asia-east2":"Hong Kong","asia-northeast1":"Tokyo","asia-northeast2":"Osaka","asia-northeast3":"Seoul","asia-south1":"Mumbai",
+  "asia-south2":"Delhi","asia-southeast1":"Singapore","asia-southeast2":"Jakarta","australia-southeast1":"Sydney",
+  "australia-southeast2":"Melbourne","me-west1":"Tel Aviv","me-central1":"Doha","africa-south1":"Johannesburg" };
+const OVH_SITES = { gra:"Gravelines", sbg:"Strasbourg", rbx:"Roubaix", bhs:"Beauharnois", waw:"Warsaw", de:"Frankfurt", uk:"London",
+  sgp:"Singapore", syd:"Sydney", lim:"Limburg", mum:"Mumbai", yto:"Toronto" };
+const locApple = (v) => { const m = /^[a-z]{2}([a-z]{3})\d/i.exec(v); return m ? (CITY3[m[1].toLowerCase()] || IATA[m[1].toUpperCase()] || "") : ""; };
+const locCacheFly = (v) => { const m = /^([a-z]{3})\d/i.exec(v); return m ? (IATA[m[1].toUpperCase()] || "") : ""; };
+const locCdn77 = (v) => { const m = /^([a-z]+)\d/i.exec(v); return m ? m[1][0].toUpperCase() + m[1].slice(1) : ""; };
+
 // ---------- full test list ----------
 // latencyOnly: endpoint does not expose a POP header to browsers, so it is only useful for latency.
 const cdnsRaw = [
-  {name:"Apple Edge", url:"https://test.edge.apple/who", type:"text"},
+  {name:"Apple Edge", url:"https://test.edge.apple/who", type:"text", locate:locApple},
   {name:"Cloudflare", url:"https://cloudflare.com/cdn-cgi/trace", type:"trace"},
   {name:"Cloudflare CN", url:"https://perfops.cloudflareperf.com/cdn-cgi/trace", type:"trace"},
   {name:"Fastly", url:"https://any.pops.fastly-analytics.com", parse:(h)=>parseFastly(h.get("x-served-by"))},
   {name:"jsDelivr", url:"https://cdn.jsdelivr.net/npm/latency-test@1.0.0/generate_200", parse:(h)=>parseJsDelivr(h), note:"multi-CDN endpoint"},
   {name:"AWS CloudFront", url:"https://djlzvy5xcvhxt.cloudfront.net/500b-bench.jpg", parse:(h)=>pick(h.get("x-amz-cf-pop"), v=>v.split(";")[0])},
-  {name:"GCP Anycast LB", url:"https://global.gcping.com/api/ping", type:"text"},
+  {name:"GCP Anycast LB", url:"https://global.gcping.com/api/ping", type:"text", locate:(v)=>GCP_REGIONS[v] || ""},
   {name:"Google Cloud CDN", url:"https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js", latencyOnly:true},
   {name:"Akamai", url:"https://akamai-cdn.perfops.io/500b-bench.jpg", parse:(h)=>pick(h.get("x-cache2"), v=>v.split("|")[2] || null)},
   {name:"Akamai Video", url:"https://perfopsrum.akamaized.net/500b-bench.jpg", parse:(h)=>pick(h.get("x-cache2"), v=>v.split("|")[2] || null)},
   {name:"Akamai Edge IP Binding", url:"https://perfopsrum-eip.akamaized.net/500b-bench.jpg", parse:(h)=>pick(h.get("x-cache2"), v=>v.split("|")[2] || null)},
   {name:"Bunny Standard", url:"https://test.b-cdn.net", parse:(h)=>parseBunny(h.get("server"))},
   {name:"Bunny Volume", url:"https://testvideo.b-cdn.net", parse:(h)=>parseBunny(h.get("server"))},
-  {name:"CDN77", url:"https://1596384882.rsc.cdn77.org/500b-bench.jpg", parse:(h)=>h.get("x-77-pop")},
+  {name:"CDN77", url:"https://1596384882.rsc.cdn77.org/500b-bench.jpg", parse:(h)=>h.get("x-77-pop"), locate:locCdn77},
   {name:"Tencent EdgeOne Static", url:"https://eo-static-perfops2.qcloudcdn.com/500b-bench.jpg", parse:(h)=>parseXcc(h.get("xcc"))},
   {name:"Virtuozzo (CDN.net)", url:"https://perfops.r.worldssl.net/500b-bench.jpg", parse:(h)=>h.get("x-edge-location")},
-  {name:"OVH CDN", url:"https://ovh-cdn.perfops.io/500b-bench.jpg", parse:(h)=>h.get("x-cdn-pop")},
-  {name:"CacheFly", url:"https://cdnperf.cachefly.net/500b-bench.jpg", parse:(h)=>parseCacheFly(h.get("x-cf1"))},
+  {name:"OVH CDN", url:"https://ovh-cdn.perfops.io/500b-bench.jpg", parse:(h)=>h.get("x-cdn-pop"), locate:(v)=>OVH_SITES[v.toLowerCase()] || ""},
+  {name:"CacheFly", url:"https://cdnperf.cachefly.net/500b-bench.jpg", parse:(h)=>parseCacheFly(h.get("x-cf1")), locate:locCacheFly},
   {name:"KeyCDN", url:"https://www.keycdn.com/favicon.ico", parse:(h)=>h.get("x-edge-location"), latencyOnly:true},
   {name:"Medianova", url:"https://medianova-cdnvperf.mncdn.com/500b-bench.jpg", parse:(h)=>h.get("x-edge-location")},
   {name:"Microsoft Azure CDN", url:"https://ajax.aspnetcdn.com/ajax/jQuery/jquery-3.7.1.min.js", latencyOnly:true},
@@ -725,6 +773,7 @@ function sortedRows(){
     node:    (r) => (r.node || "").toLowerCase(),
     loc:     (r) => (r.city || "").toLowerCase(),
     cache:   (r) => (r.cache || "").toLowerCase(),
+    ip:      (r) => r.dns ? (r.dns.v4.length ? 1 : 0) + (r.dns.v6.length ? 2 : 0) : null,
     latency: (r) => r.median,
     status:  (r) => STATUS_RANK[r.kind] ?? 9,
   }[sortKey];
@@ -766,7 +815,28 @@ function latencyCell(r){
   return `<span class="mono">${r.median} ms</span>${delta}${sub ? `<div class="subLine">${sub}</div>` : ""}`;
 }
 
+function barClass(ms){ return ms < 120 ? "good" : ms < 300 ? "mid" : "slow"; }
+
+function ipCell(r){
+  if(!r.dns) return `<span class="mono" style="color:var(--muted)">—</span>`;
+  const likely = likelyFamily(r);
+  const tip = (list) => escapeHtml(list.slice(0, 4).join("\n") || "no records");
+  const chip = (fam, list) => `<span class="chip ${fam} ${list.length ? "on" : ""} ${likely === fam ? "likely" : ""}" title="${tip(list)}">${fam}</span>`;
+  return `<div class="chips" title="Records via Cloudflare DoH. Highlighted = likely family your browser used.">${chip("v4", r.dns.v4)}${chip("v6", r.dns.v6)}</div>`;
+}
+
+function locCell(r){
+  if(r.city){
+    return r.locSource === "node-ip" || r.locSource === "dns-ip"
+      ? `<span class="locApprox" title="Approximate: IP geolocation of ${escapeHtml(r.geoIp)}${r.locSource === "dns-ip" ? " (resolved endpoint, not necessarily the serving edge)" : ""}">~ ${escapeHtml(r.city)}</span>`
+      : escapeHtml(r.city);
+  }
+  if(r.locSource === "anycast") return `<span class="locNone" title="${escapeHtml(r.geoIp)} is anycast, so it has no single location">Anycast</span>`;
+  return "—";
+}
+
 function render(){
+  const maxCold = Math.max(1, ...rowsState.map(r => Math.max(r.cold || 0, r.median || 0)));
   document.querySelectorAll("th.sortable").forEach(th => {
     th.querySelector(".arrow").textContent = th.dataset.sort === sortKey ? (sortDir > 0 ? "▲" : "▼") : "";
   });
@@ -777,11 +847,12 @@ function render(){
     tr.innerHTML = `
       <td class="colCdn"><div style="font-weight:900">${escapeHtml(r.cdn)}</div></td>
       <td class="colNode"><div class="nodeText mono">${escapeHtml(nodeTxt)}</div></td>
-      <td class="colLoc"><div class="nodeText">${escapeHtml(r.city || "—")}</div></td>
+      <td class="colLoc"><div class="nodeText">${locCell(r)}</div></td>
+      <td class="colIp">${ipCell(r)}</td>
       <td class="colCache"><div class="mono" style="color:rgba(255,255,255,.75)">${escapeHtml(r.cache || "—")}</div></td>
       <td class="colDetails"><div class="mono" style="color:rgba(255,255,255,.75)">${escapeHtml(r.details || "—")}</div></td>
       <td class="colHeaders"><button class="smallBtn">View</button></td>
-      <td class="colLatency" style="text-align:right">${latencyCell(r)}</td>
+      <td class="colLatency" style="text-align:right">${latencyCell(r)}${r.median != null ? `<div class="lbar" title="Solid = warm median, faint = cold first request"><i class="cold" style="width:${Math.round(r.cold / maxCold * 100)}%"></i><i class="${barClass(r.median)}" style="width:${Math.round(r.median / maxCold * 100)}%"></i></div>` : ""}</td>
       <td class="colStatus" style="text-align:right">${badgeFor(r)}</td>
     `;
     tr.querySelector("button").addEventListener("click", ()=>showHeaders(r));
@@ -825,6 +896,13 @@ function renderSummary(){
       }
     }
   }
+  const withDns = rowsState.filter(r => r.dns);
+  if(withDns.length){
+    const dual = withDns.filter(r => r.dns.v4.length && r.dns.v6.length).length;
+    const v4only = withDns.filter(r => r.dns.v4.length && !r.dns.v6.length).length;
+    parts.push(pill("Dual-stack", `${dual}/${withDns.length}`));
+    if(v4only) parts.push(pill("IPv4-only", `${v4only}`));
+  }
   if(failed.length) parts.push(pill("Failed", `${failed.length}: ${failed.map(r => r.cdn).join(", ")}`));
   elSummary.innerHTML = parts.join("");
 }
@@ -846,7 +924,8 @@ function showHeaders(row){
 function exportRow(r){
   return {
     cdn: r.cdn, url: r.url, status: r.status, kind: r.kind,
-    node: r.node, city: r.city, cache: r.cache, details: r.details, protocol: r.proto,
+    node: r.node, city: r.city, locationSource: r.locSource || null, geoIp: r.geoIp || null,
+    dns: r.dns, likelyFamily: likelyFamily(r), cache: r.cache, details: r.details, protocol: r.proto,
     latencyMs: { median: r.median, cold: r.cold, best: r.best, samples: r.samples },
     timing: r.timing,
     headers: r.headers,
@@ -872,7 +951,8 @@ function generateReport(){
       : "";
     const city = r.city ? ` (${r.city})` : "";
     const cache = r.cache ? ` — cache ${r.cache}` : "";
-    lines.push(`${r.cdn} — ${r.node || "—"}${city}${cache} — ${r.details || "—"} — ${r.status}${lat}`);
+    const fam = r.dns ? ` — ${r.dns.v4.length ? "v4" : ""}${r.dns.v4.length && r.dns.v6.length ? "+" : ""}${r.dns.v6.length ? "v6" : ""}` : "";
+    lines.push(`${r.cdn} — ${r.node || "—"}${city}${fam}${cache} — ${r.details || "—"} — ${r.status}${lat}`);
   }
   return lines.join("\n");
 }
@@ -908,12 +988,94 @@ elBtnCopy.addEventListener("click", async ()=>{
   setTimeout(()=> elBtnCopy.textContent = old, 1400);
 });
 
+// ---------- DNS (A / AAAA) and IP geolocation ----------
+// DNS is resolved through Cloudflare DoH, so answers reflect that resolver, not necessarily your own.
+const IPV4_RE = /\b\d{1,3}(?:\.\d{1,3}){3}\b/;
+const dnsCache = new Map();
+
+async function dohQuery(host, type){
+  const j = await fetchJson(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(host)}&type=${type}`, 5000, { accept:"application/dns-json" });
+  const want = type === "A" ? 1 : 28;
+  return (j.Answer || []).filter(a => a.type === want).map(a => a.data);
+}
+function resolveHost(host){
+  if(!dnsCache.has(host)){
+    dnsCache.set(host, Promise.all([dohQuery(host, "A").catch(() => null), dohQuery(host, "AAAA").catch(() => null)])
+      .then(([v4, v6]) => (v4 === null && v6 === null) ? null : { v4: v4 || [], v6: v6 || [] }));
+  }
+  return dnsCache.get(host);
+}
+function likelyFamily(r){
+  if(!r.dns) return null;
+  if(r.dns.v6.length && clientHasV6()) return "v6";   // browsers prefer IPv6 when both work
+  if(r.dns.v4.length) return "v4";
+  return r.dns.v6.length ? "v6" : null;
+}
+
+const GEO_KEY = "cdntester.geo.v1";
+const GEO_TTL = 7 * 24 * 3600 * 1000;
+const geoInflight = new Map();
+let geoActive = 0;
+const geoWaiters = [];
+function geoStore(ip, val){
+  try{
+    const all = JSON.parse(localStorage.getItem(GEO_KEY) || "{}");
+    all[ip] = { t: Date.now(), ...val };
+    localStorage.setItem(GEO_KEY, JSON.stringify(all));
+  }catch{}
+}
+function geoCached(ip){
+  try{
+    const e = JSON.parse(localStorage.getItem(GEO_KEY) || "{}")[ip];
+    return e && Date.now() - e.t < GEO_TTL ? e : null;
+  }catch{ return null; }
+}
+async function geoSlot(){
+  if(geoActive >= 3) await new Promise(r => geoWaiters.push(r));
+  geoActive++;
+}
+function geoRelease(){ geoActive--; const w = geoWaiters.shift(); if(w) w(); }
+function geoLookup(ip){
+  const hit = geoCached(ip);
+  if(hit) return Promise.resolve(hit);
+  if(!geoInflight.has(ip)){
+    geoInflight.set(ip, (async () => {
+      await geoSlot();
+      try{
+        const j = await fetchJson(`https://ipinfo.io/${ip}/json`, 6000);
+        if(!j || j.error || j.status === 429) return null;
+        const g = { city:j.city || "", region:j.region || "", country:j.country || "", loc:j.loc || "", anycast:!!j.anycast };
+        geoStore(ip, g);
+        return g;
+      }catch{ return null; }
+      finally{ geoRelease(); }
+    })());
+  }
+  return geoInflight.get(ip);
+}
+
+// Fills in Location for rows where the node string did not reveal one, using IP geolocation of
+// the node (if it is an IP) or of the resolved endpoint. Marked approximate; anycast has no location.
+async function enrichLocation(row){
+  if(row.city) return;
+  const m = (row.node || "").match(IPV4_RE);
+  const ip = m ? m[0] : (row.dns && (row.dns.v4[0] || row.dns.v6[0]));
+  if(!ip) return;
+  const g = await geoLookup(ip);
+  if(!g) return;
+  row.geoIp = ip;
+  if(g.anycast){ row.locSource = "anycast"; return; }
+  const place = [g.city, g.country].filter(Boolean).join(", ");
+  if(place){ row.city = place; row.locSource = m ? "node-ip" : "dns-ip"; }
+}
+
 // ---------- probing ----------
 function blankRow(c){
   return {
     cdn:c.name, url:c.url, kind:"pending", status:"…", node:"Checking…", city:"", cache:"",
     details:"—", proto:"", headers:{}, timing:null,
     samples:[], cold:null, median:null, best:null, blockedMs:null,
+    dns:null, locSource:"", geoIp:"",
   };
 }
 
@@ -988,12 +1150,14 @@ async function probe(idx){
   const row = blankRow(c);
   rowsState[idx] = row;
   const nSamples = currentSamples();
+  const dnsP = resolveHost(new URL(c.url).hostname);
 
   let first;
   try{
     first = await firstSample(c);
   }catch(e){
     Object.assign(row, { node:"Failed", ...(await classifyFailure(c, e)) });
+    row.dns = await dnsP;
     return;
   }
 
@@ -1033,7 +1197,8 @@ async function probe(idx){
   const hidden = !node;
   Object.assign(row, {
     node: node || (c.latencyOnly ? "n/a (latency only)" : "Hidden / N/A"),
-    city: cityFor(node),
+    city: (node && ((c.locate && c.locate(node)) || cityFor(node))) || "",
+    locSource: "code",
     cache: parseCache(res.headers),
     details: details.join(" · ") || "—",
     proto: timing ? timing.protocol : "",
@@ -1046,6 +1211,11 @@ async function probe(idx){
     kind: !res.ok ? "http" : (hidden && !c.latencyOnly ? "nopop" : "ok"),
     status: res.ok ? "OK" : "HTTP " + res.status,
   });
+  row.dns = await dnsP;
+  if(!row.city){
+    row.locSource = "";
+    enrichLocation(row).then(scheduleRender, () => {});
+  }
 }
 
 async function runIndices(indices){
